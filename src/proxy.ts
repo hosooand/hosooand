@@ -63,7 +63,7 @@ export default async function proxy(request: NextRequest) {
 
   // /admin 접근: admin 또는 승인된 staff만 허용 (/admin/users는 아래에서 admin만 허용)
   if (path.startsWith('/admin') && !path.startsWith('/admin/users') && user) {
-    const { data: adminProfile } = await supabase
+    const { data: adminProfile, error: adminProfileError } = await supabase
       .from('profiles')
       .select('role, is_approved')
       .eq('id', user.id)
@@ -71,6 +71,17 @@ export default async function proxy(request: NextRequest) {
     const allowed =
       adminProfile?.role === 'admin' ||
       (adminProfile?.role === 'staff' && adminProfile?.is_approved === true)
+
+    console.log('[middleware] /admin access check', {
+      path,
+      userId: user.id,
+      profile: adminProfile,
+      role: adminProfile?.role ?? null,
+      is_approved: adminProfile?.is_approved ?? null,
+      allowed,
+      error: adminProfileError?.message ?? null,
+    })
+
     if (!allowed) {
       return NextResponse.redirect(new URL('/dashboard', request.url))
     }
