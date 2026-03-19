@@ -4,7 +4,7 @@ import type { NextRequest } from 'next/server'
 
 const PUBLIC_PATHS = ['/login', '/signup', '/forgot-password', '/auth', '/reset-password']
 
-export async function proxy(request: NextRequest) {
+export default async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient(
@@ -44,11 +44,18 @@ export async function proxy(request: NextRequest) {
 
   // admin 전용 경로 보호
   if (path.startsWith('/admin/users') && user) {
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('role')
       .eq('id', user.id)
       .single()
+
+    console.log('[middleware] admin check', {
+      path,
+      userId: user.id,
+      profile,
+      profileError: profileError?.message ?? null,
+    })
 
     if (profile?.role !== 'admin') {
       return NextResponse.redirect(new URL('/dashboard', request.url))
