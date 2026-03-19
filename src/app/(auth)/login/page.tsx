@@ -47,12 +47,6 @@ export default function LoginPage() {
     router.refresh()
   }
 
-  async function socialLogin(provider: 'kakao' | 'google') {
-    await supabase.auth.signInWithOAuth({
-      provider,
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
-    })
-  }
 
   return (
     <div className="w-full max-w-[400px]">
@@ -155,25 +149,6 @@ export default function LoginPage() {
         </button>
       </form>
 
-      {/* 구분선 */}
-      <div className="flex items-center gap-3 mb-5">
-        <div className="flex-1 h-px bg-gray-200" />
-        <span className="text-xs text-gray-400">또는 소셜 로그인</span>
-        <div className="flex-1 h-px bg-gray-200" />
-      </div>
-
-      {/* 소셜 버튼 */}
-      <div className="flex gap-2.5 mb-7">
-        {(['kakao', 'google'] as const).map(p => (
-          <button key={p} onClick={() => socialLogin(p)}
-            className="flex-1 h-[46px] border-[1.5px] border-gray-200 rounded-[10px]
-              flex items-center justify-center gap-2 text-[13px] font-medium text-gray-600
-              hover:border-pink-200 hover:bg-pink-50 hover:text-pink-600
-              hover:-translate-y-0.5 hover:shadow-sm transition-all capitalize">
-            {p === 'kakao' ? '카카오' : 'Google'}
-          </button>
-        ))}
-      </div>
 
       <p className="text-center text-[13px] text-gray-400">
         아직 계정이 없으신가요?{' '}
