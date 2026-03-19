@@ -12,16 +12,18 @@ export default async function DashboardLayout({ children }: { children: ReactNod
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('name, avatar, role')
+    .select('name, avatar, role, is_approved')
     .eq('id', user.id)
     .single()
 
-    const navItems = [
-      { href: '/dashboard', icon: '📊', label: '홈'      },
-      { href: '/diary',     icon: '📝', label: '다이어리' },
-      { href: '/mypage',    icon: '👤', label: '마이'     },
-      ...(profile?.role === 'staff' ? [{ href: '/admin', icon: '👩‍⚕️', label: '고객관리' }] : []),
-    ]
+  const showAdminNav =
+    profile?.role === 'admin' || (profile?.role === 'staff' && profile?.is_approved === true)
+  const navItems = [
+    { href: '/dashboard', icon: '📊', label: '홈'      },
+    { href: '/diary',     icon: '📝', label: '다이어리' },
+    { href: '/mypage',    icon: '👤', label: '마이'     },
+    ...(showAdminNav ? [{ href: '/admin', icon: '👩‍⚕️', label: '회원관리' }] : []),
+  ]
 
   return (
     <div className="min-h-screen bg-[#FFF8FB]">

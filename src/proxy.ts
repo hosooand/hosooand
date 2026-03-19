@@ -37,6 +37,18 @@ export default async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 
+  // staff 미승인 시 로그인으로 리다이렉트 (승인 후에만 대시보드 등 이용 가능)
+  if (user && !isPublic) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role, is_approved')
+      .eq('id', user.id)
+      .single()
+    if (profile?.role === 'staff' && profile?.is_approved === false) {
+      return NextResponse.redirect(new URL('/login', request.url))
+    }
+  }
+
   // 채팅 기능 폐기 — /chat 접근 시 대시보드로 리다이렉트
   if (path.startsWith('/chat')) {
     return NextResponse.redirect(new URL('/dashboard', request.url))

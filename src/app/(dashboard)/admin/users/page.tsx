@@ -24,12 +24,12 @@ export default async function AdminUsersPage() {
 
   if (me?.role !== 'admin') redirect('/dashboard')
 
-  // 미승인 회원 목록
+  // 미승인 staff 목록 (최초 1회 승인 후 자유 로그인)
   const { data: pending } = await supabase
     .from('profiles')
     .select('id, name, member_number, created_at')
     .eq('is_approved', false)
-    .eq('role', 'member')
+    .eq('role', 'staff')
     .order('created_at', { ascending: false })
 
   return <AdminUsersClient initialUsers={(pending ?? []) as PendingUser[]} />
