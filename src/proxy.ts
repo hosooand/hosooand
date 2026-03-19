@@ -36,10 +36,25 @@ export async function proxy(request: NextRequest) {
   if (user && (path === '/login' || path === '/signup')) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
-// 채팅 기능 폐기 — /chat 접근 시 대시보드로 리다이렉트
-if (path.startsWith('/chat')) {
-  return NextResponse.redirect(new URL('/dashboard', request.url))
-}
+
+  // 채팅 기능 폐기 — /chat 접근 시 대시보드로 리다이렉트
+  if (path.startsWith('/chat')) {
+    return NextResponse.redirect(new URL('/dashboard', request.url))
+  }
+
+  // admin 전용 경로 보호
+  if (path.startsWith('/admin/users') && user) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    if (profile?.role !== 'admin') {
+      return NextResponse.redirect(new URL('/dashboard', request.url))
+    }
+  }
+
   return supabaseResponse
 }
 
