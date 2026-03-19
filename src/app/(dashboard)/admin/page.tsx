@@ -29,11 +29,13 @@ export default async function AdminPage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('role, id, name')
+    .select('role, is_approved, id, name')
     .eq('id', user.id)
     .single()
 
-  if (profile?.role !== 'staff') redirect('/dashboard')
+  const allowed =
+    profile?.role === 'admin' || (profile?.role === 'staff' && profile?.is_approved === true)
+  if (!allowed) redirect('/dashboard')
 
   // 고객 목록 조회
   const { data: members, error: membersError } = await supabase
