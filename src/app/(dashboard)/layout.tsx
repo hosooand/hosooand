@@ -10,12 +10,15 @@ export default async function DashboardLayout({ children }: { children: ReactNod
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from('profiles')
     .select('name, avatar, role, is_approved')
     .eq('id', user.id)
     .single()
 
+  console.log('[dashboard layout] profile', { profile, profileError: profileError?.message, userId: user.id })
+
+  // admin이면 무조건 회원관리 표시, staff는 승인된 경우만
   const showAdminNav =
     profile?.role === 'admin' || (profile?.role === 'staff' && profile?.is_approved === true)
   const navItems = [

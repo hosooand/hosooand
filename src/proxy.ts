@@ -54,7 +54,22 @@ export default async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 
-  // admin 전용 경로 보호
+  // /admin 접근: admin 또는 승인된 staff만 허용 (/admin/users는 아래에서 admin만 허용)
+  if (path.startsWith('/admin') && !path.startsWith('/admin/users') && user) {
+    const { data: adminProfile } = await supabase
+      .from('profiles')
+      .select('role, is_approved')
+      .eq('id', user.id)
+      .single()
+    const allowed =
+      adminProfile?.role === 'admin' ||
+      (adminProfile?.role === 'staff' && adminProfile?.is_approved === true)
+    if (!allowed) {
+      return NextResponse.redirect(new URL('/dashboard', request.url))
+    }
+  }
+
+  // /admin/users: admin 전용 경로 보호
   if (path.startsWith('/admin/users') && user) {
     const { data: profile, error: profileError } = await supabase
       .from('profiles')

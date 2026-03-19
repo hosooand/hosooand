@@ -2,6 +2,7 @@ import { createServerSupabaseClient } from '@/lib/supabase/server'
 import Image from 'next/image'
 import Link from 'next/link'
 import DashboardCharts from './_components/DashboardCharts'
+import ClinicStatus from './_components/ClinicStatus'
 
 export default async function DashboardPage() {
   const supabase = await createServerSupabaseClient()
@@ -117,24 +118,7 @@ export default async function DashboardPage() {
           ))}
         </div>
 
-        {(() => {
-          const day  = new Date().getDay()
-          const now  = new Date()
-          const hhmm = now.getHours() * 100 + now.getMinutes()
-          const isOpen = (() => {
-            if (day === 0 || day === 3) return false
-            if (day === 6) return hhmm >= 1030 && hhmm < 1500
-            return (hhmm >= 1030 && hhmm < 1330) || (hhmm >= 1430 && hhmm < 1900)
-          })()
-          return (
-            <div className={`mt-3 px-3 py-2 rounded-[8px] text-center text-[13px] font-semibold
-              ${isOpen
-                ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
-                : 'bg-rose-50 text-rose-500 border border-rose-100'}`}>
-              {isOpen ? '🟢 현재 진료 중' : '🔴 현재 진료 종료'}
-            </div>
-          )
-        })()}
+        <ClinicStatus />
       </div>
 
     </div>
