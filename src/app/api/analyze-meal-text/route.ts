@@ -19,7 +19,13 @@ import { createServerSupabaseClient } from '@/lib/supabase/server'
  */
 
 const ROUTE = '[analyze-meal-text]'
-const MODEL = process.env.GEMINI_MODEL ?? 'gemini-2.0-flash'
+const DEFAULT_MODEL = 'gemini-2.0-flash'
+const ENV_MODEL = process.env.GEMINI_MODEL
+
+// `gemini-flash-lite-latest`는 Gemini API에서 모델 ID로 문서에서 확인되지 않아,
+// 실서비스에서 실수로 넣었을 때도 동작하도록 Gemini API 공식 모델로 매핑합니다.
+const MODEL =
+  ENV_MODEL === 'gemini-flash-lite-latest' ? DEFAULT_MODEL : ENV_MODEL ?? DEFAULT_MODEL
 
 function log(step: string, detail?: unknown) {
   if (detail !== undefined) console.log(`${ROUTE} ${step}`, detail)
@@ -146,7 +152,7 @@ export async function POST(req: NextRequest) {
     }
 
     lastStep = 'STEP 5: GoogleGenerativeAI + model'
-    log(lastStep, { model: MODEL })
+    log(lastStep, { requestedModel: ENV_MODEL ?? null, model: MODEL })
     const genAI = new GoogleGenerativeAI(key)
     const model = genAI.getGenerativeModel({
       model: MODEL,
