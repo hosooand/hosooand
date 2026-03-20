@@ -14,18 +14,20 @@ export default async function DiaryPage({ searchParams }: Props) {
   const params = await searchParams
   const date = params.date ?? new Date().toLocaleDateString('en-CA')
 
-  const { data: log } = await supabase
-    .from('daily_logs')
-    .select('*')
-    .eq('user_id', user.id)
-    .eq('date', date)
-    .single()
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('name, target_weight')
-    .eq('id', user.id)
-    .single()
+  // date 기반 log + profile은 서로 독립이므로 병렬 실행
+  const [{ data: log }, { data: profile }] = await Promise.all([
+    supabase
+      .from('daily_logs')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('date', date)
+      .single(),
+    supabase
+      .from('profiles')
+      .select('name, target_weight')
+      .eq('id', user.id)
+      .single(),
+  ])
 
   return (
     <DiaryClient

@@ -39,17 +39,26 @@ export default async function AdminPage() {
     profile?.role === 'admin' || (profile?.role === 'staff' && profile?.is_approved === true)
   if (!allowed) redirect('/dashboard')
 
-  // 고객 목록 조회
-  const { data: members, error: membersError } = await supabase
-    .from('profiles')
-    .select('id, name, height, current_weight, avatar, created_at, member_number')
-    .eq('role', 'member')
-    .order('created_at', { ascending: false })
+  // members + notes는 서로 독립이므로 병렬 실행
+  const [{ data: members, error: membersError }, { data: notesRaw, error: notesError }] =
+    await Promise.all([
+      supabase
+        .from('profiles')
+        .select('id, name, height, current_weight, avatar, created_at, member_number')
+        .eq('role', 'member')
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('staff_notes')
+        .select('id, member_id, staff_id, content, created_at, updated_at')
+        .order('created_at', { ascending: false }),
+    ])
 
   console.log('DB에서 조회한 고객 데이터:', members)
   console.log('고객 조회 에러:', membersError)
+  console.log('DB에서 조회한 메모 데이터:', notesRaw)
+  console.log('메모 조회 에러:', notesError)
 
-  // 최근 30일 daily_logs 중 meal_entries가 있는 회원 표시용
+  // 최근 30일 daily_logs 중 meal_entries가 있는 회원 표시용 (members 필요)
   const memberList = members ?? []
   const memberIds = memberList.map(m => m.id)
   const mealUserIds = new Set<string>()
@@ -72,15 +81,6 @@ export default async function AdminPage() {
     ...m,
     has_recent_meal_entries: mealUserIds.has(m.id),
   }))
-
-  // 메모 조회 — foreign key join 없이 단순 조회
-  const { data: notesRaw, error: notesError } = await supabase
-    .from('staff_notes')
-    .select('id, member_id, staff_id, content, created_at, updated_at')
-    .order('created_at', { ascending: false })
-
-  console.log('DB에서 조회한 메모 데이터:', notesRaw)
-  console.log('메모 조회 에러:', notesError)
 
   // staff 이름 매핑
   const notes: StaffNote[] = (notesRaw ?? []).map(note => ({

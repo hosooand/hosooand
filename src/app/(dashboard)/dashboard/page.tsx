@@ -8,21 +8,24 @@ export default async function DashboardPage() {
   const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('name')
-    .eq('id', user!.id)
-    .single()
-
   const from = new Date()
   from.setDate(from.getDate() - 30)
+  const fromStr = from.toISOString().split('T')[0]
 
-  const { data: logs } = await supabase
-    .from('daily_logs')
-    .select('date, meal_analysis, water_intake, sleep_hours, condition, exercise_logs')
-    .eq('user_id', user!.id)
-    .gte('date', from.toISOString().split('T')[0])
-    .order('date', { ascending: true })
+  // profile + logs는 서로 독립이므로 병렬 실행
+  const [{ data: profile }, { data: logs }] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('name')
+      .eq('id', user!.id)
+      .single(),
+    supabase
+      .from('daily_logs')
+      .select('date, meal_analysis, water_intake, sleep_hours, condition, exercise_logs')
+      .eq('user_id', user!.id)
+      .gte('date', fromStr)
+      .order('date', { ascending: true }),
+  ])
 
   return (
     <div className="max-w-2xl mx-auto px-4 pt-6 pb-8">
