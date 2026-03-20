@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition, useEffect } from 'react'
+import { useState, useTransition, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -84,7 +84,7 @@ export default function DiaryClient({ date, initialLog, profile, userId }: Props
   const [isPending, startTransition] = useTransition()
   const [mealEntries, setMealEntries] = useState<MealPanelEntry[]>(() => extractMealEntries(initialLog))
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
-  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false)
+  const dateInputRef = useRef<HTMLInputElement>(null)
 
   const { register, handleSubmit, watch, setValue, reset, formState: { errors } } =
     useForm<DailyLogFormValues>({
@@ -162,8 +162,21 @@ export default function DiaryClient({ date, initialLog, profile, userId }: Props
 
   function handleDatePick(nextDate: string) {
     if (!nextDate) return
-    setIsDatePickerOpen(false)
     router.push(`/diary?date=${nextDate}`)
+  }
+
+  function openNativeDatePicker() {
+    const el = dateInputRef.current
+    if (!el) return
+    try {
+      if (typeof el.showPicker === 'function') {
+        el.showPicker()
+        return
+      }
+    } catch {
+      // 일부 브라우저는 showPicker()가 거부될 수 있음
+    }
+    el.click()
   }
 
   return (
@@ -182,14 +195,24 @@ export default function DiaryClient({ date, initialLog, profile, userId }: Props
                 text-gray-400 hover:text-pink-500 hover:bg-pink-50 transition-all">
               <ChevronLeft size={18} />
             </button>
-            <div className="text-center">
+            <div className="text-center relative inline-flex flex-col items-center">
               <button
                 type="button"
-                onClick={() => setIsDatePickerOpen(v => !v)}
+                onClick={openNativeDatePicker}
                 className="text-[15px] font-semibold text-gray-800 leading-none hover:text-pink-600 transition-colors"
               >
                 {formatDateKo(date)}
               </button>
+              <input
+                ref={dateInputRef}
+                type="date"
+                value={date}
+                max={new Date().toLocaleDateString('en-CA')}
+                onChange={(e) => handleDatePick(e.target.value)}
+                className="sr-only"
+                tabIndex={-1}
+                aria-hidden="true"
+              />
               {isToday(date) && <span className="text-[11px] text-pink-500 font-medium">오늘</span>}
             </div>
             <button type="button" onClick={() => goDate(1)} disabled={isToday(date)}
@@ -199,17 +222,6 @@ export default function DiaryClient({ date, initialLog, profile, userId }: Props
               <ChevronRight size={18} />
             </button>
           </div>
-
-          {isDatePickerOpen && (
-            <input
-              type="date"
-              value={date}
-              max={new Date().toLocaleDateString('en-CA')}
-              onChange={(e) => handleDatePick(e.target.value)}
-              className="h-9 px-2 rounded-md border border-pink-200 bg-white text-[13px] text-gray-700 outline-none
-                focus:border-pink-300 focus:ring-2 focus:ring-pink-100"
-            />
-          )}
 
           <button type="button" onClick={handleSubmit(onSubmit)} disabled={isPending}
             className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[13px] font-semibold
