@@ -76,15 +76,18 @@ export async function upsertDailyLog(
     throw new Error(error.message)
   }
 
+  const returnedMealEntries = (data as unknown as { meal_entries?: unknown }).meal_entries
+  const returnedMealEntriesIsArray = Array.isArray(returnedMealEntries)
+
   console.log('[upsertDailyLog] after upsert', {
-    returned_meal_entries_present: (data as unknown as { meal_entries?: unknown }).meal_entries !== undefined,
+    returned_meal_entries_present: returnedMealEntries !== undefined,
     returned_meal_entries_type:
-      (data as unknown as { meal_entries?: unknown }).meal_entries == null
-        ? String((data as unknown as { meal_entries?: unknown }).meal_entries)
-        : typeof (data as unknown as { meal_entries?: unknown }).meal_entries,
-    returned_meal_entries_is_array: Array.isArray((data as unknown as { meal_entries?: unknown }).meal_entries),
-    returned_meal_entries_length: Array.isArray((data as unknown as { meal_entries?: unknown }).meal_entries)
-      ? (data as unknown as { meal_entries?: unknown }).meal_entries?.length ?? null
+      returnedMealEntries == null
+        ? String(returnedMealEntries)
+        : typeof returnedMealEntries,
+    returned_meal_entries_is_array: returnedMealEntriesIsArray,
+    returned_meal_entries_length: returnedMealEntriesIsArray
+      ? returnedMealEntries.length
       : null,
   })
   return data

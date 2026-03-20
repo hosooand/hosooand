@@ -2,6 +2,22 @@ import { NextRequest, NextResponse } from 'next/server'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 
+/**
+ * Vercel(및 로컬)에 필요한 환경 변수 — 이 라우트 + Supabase SSR
+ *
+ * 【필수】
+ * - GEMINI_API_KEY … Google AI Studio / Vertex에서 발급한 API 키 (텍스트·이미지 분석 공통)
+ * - NEXT_PUBLIC_SUPABASE_URL … Supabase 프로젝트 URL (createServerSupabaseClient)
+ * - NEXT_PUBLIC_SUPABASE_ANON_KEY … Supabase anon 키
+ *
+ * 【선택】
+ * - GEMINI_MODEL … 기본값: gemini-2.0-flash (없으면 이 값 사용)
+ *   예: gemini-2.0-flash, gemini-1.5-flash, gemini-2.5-flash-preview-05-20 등
+ *
+ * Vercel 대시보드: Project → Settings → Environment Variables 에서
+ * Production / Preview / Development 각각 동일하게 등록했는지 확인하세요.
+ */
+
 const ROUTE = '[analyze-meal-text]'
 const MODEL = process.env.GEMINI_MODEL ?? 'gemini-2.0-flash'
 
@@ -10,12 +26,74 @@ function log(step: string, detail?: unknown) {
   else console.log(`${ROUTE} ${step}`)
 }
 
+type ErrorBody = {
+  ok: false
+  error: {
+    message: string
+    step: string
+    code?: string
+    details?: string
+    hint?: string
+    /** 개발 환경에서만 포함 */
+    stack?: string
+  }
+}
+
+function normalizeError(err: unknown, step: string): ErrorBody['error'] {
+  const base: ErrorBody['error'] = { message: '알 수 없는 오류', step }
+
+  if (err instanceof Error) {
+    base.message = err.message || base.message
+    if (process.env.NODE_ENV === 'development') base.stack = err.stack
+  } else if (err && typeof err === 'object') {
+    const o = err as Record<string, unknown>
+    if (typeof o.message === 'string') base.message = o.message
+    if (typeof o.code === 'string') base.code = o.code
+    if (typeof o.details === 'string') base.details = o.details
+    if (typeof o.hint === 'string') base.hint = o.hint
+  } else {
+    base.message = String(err)
+  }
+
+  return base
+}
+
+function jsonError(status: number, err: unknown, step: string) {
+  const body: ErrorBody = { ok: false, error: normalizeError(err, step) }
+  console.error(`${ROUTE} JSON error response`, { status, ...body.error })
+  return NextResponse.json(body, {
+    status,
+    headers: { 'Content-Type': 'application/json; charset=utf-8' },
+  })
+}
+
+/**
+ * Gemini 응답에서 순수 JSON 객체 문자열만 추출
+ * - ```json ... ``` fenced block 우선
+ * - 실패 시 첫 '{' ~ 마지막 '}' 범위 사용
+ */
+function extractJsonOnly(raw: string): string {
+  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)
+  if (fenced?.[1]) return fenced[1].trim()
+
+  const first = raw.indexOf('{')
+  const last = raw.lastIndexOf('}')
+  if (first !== -1 && last !== -1 && last > first) {
+    return raw.slice(first, last + 1).trim()
+  }
+  return raw.trim()
+}
+
 export async function POST(req: NextRequest) {
+  let lastStep = 'INIT'
+
   try {
-    log('STEP 1: createServerSupabaseClient')
+    lastStep = 'STEP 1: createServerSupabaseClient'
+    log(lastStep)
     const supabase = await createServerSupabaseClient()
 
-    log('STEP 2: supabase.auth.getUser()')
+    lastStep = 'STEP 2: supabase.auth.getUser()'
+    log(lastStep)
     const {
       data: { user },
       error: authError,
@@ -23,55 +101,75 @@ export async function POST(req: NextRequest) {
     if (authError) console.error(`${ROUTE} STEP 2: auth error`, authError)
     if (!user) {
       log('STEP 2: no user → 401')
-      return NextResponse.json({ error: '인증 필요' }, { status: 401 })
+      return NextResponse.json(
+        { ok: false, error: { message: '인증 필요', step: 'STEP 2' } },
+        { status: 401 },
+      )
     }
     log('STEP 2: user ok', { userId: user.id })
 
-    log('STEP 3: req.json()')
+    lastStep = 'STEP 3: req.json()'
+    log(lastStep)
     let body: { text?: string; date?: string }
     try {
       body = await req.json()
     } catch (e) {
       console.error(`${ROUTE} STEP 3: JSON body parse 실패`, e)
-      throw e
+      return jsonError(400, e, 'STEP 3: req.json()')
     }
     const { text, date } = body
     if (!text) {
       log('STEP 3: missing text → 400')
-      return NextResponse.json({ error: 'text 필요' }, { status: 400 })
+      return NextResponse.json(
+        { ok: false, error: { message: 'text 필요', step: 'STEP 3' } },
+        { status: 400 },
+      )
     }
     if (!date) {
       log('STEP 3: missing date → 400')
-      return NextResponse.json({ error: 'date 필요' }, { status: 400 })
+      return NextResponse.json(
+        { ok: false, error: { message: 'date 필요', step: 'STEP 3' } },
+        { status: 400 },
+      )
     }
     log('STEP 3: body ok', { date, textPreview: String(text).slice(0, 80) })
 
+    lastStep = 'STEP 4: GEMINI_API_KEY'
     const key = process.env.GEMINI_API_KEY
-    log('STEP 4: GEMINI_API_KEY', { defined: Boolean(key), length: key?.length ?? 0 })
+    log(lastStep, { defined: Boolean(key), length: key?.length ?? 0 })
     if (!key) {
-      return NextResponse.json(
-        { error: '서버에 GEMINI_API_KEY가 설정되지 않았습니다' },
-        { status: 500 },
+      return jsonError(
+        500,
+        new Error('서버에 GEMINI_API_KEY가 설정되지 않았습니다. Vercel 환경 변수를 확인하세요.'),
+        lastStep,
       )
     }
 
-    log('STEP 5: GoogleGenerativeAI + model', { model: MODEL })
+    lastStep = 'STEP 5: GoogleGenerativeAI + model'
+    log(lastStep, { model: MODEL })
     const genAI = new GoogleGenerativeAI(key)
-    const model = genAI.getGenerativeModel({ model: MODEL })
+    const model = genAI.getGenerativeModel({
+      model: MODEL,
+      generationConfig: {
+        // 가능한 한 순수 JSON만 받도록 (SDK/모델이 지원하는 경우)
+        responseMimeType: 'application/json',
+      },
+    })
 
     const prompt = `당신은 10년 경력의 영양사이자 다이어트 매니저입니다. 아래 식단을 분석하고 다이어트 관점에서 평가해주세요. JSON만 반환하세요. 다른 텍스트 금지.\n\n식단: ${text}\n\n{"calories":숫자,"carbs":숫자,"protein":숫자,"fat":숫자,"fiber":숫자,"foods":[{"name":"음식명","amount":"양","calories":숫자}],"feedback":"한국어로 2문장. 첫 문장은 다이어트 관점 평가, 두번째 문장은 개선 조언.","analyzed_at":"${new Date().toISOString()}"}`
 
-    log('STEP 6: model.generateContent() 호출 시작')
+    lastStep = 'STEP 6: model.generateContent()'
+    log(`${lastStep} 호출 시작`)
     let result: Awaited<ReturnType<typeof model.generateContent>>
     try {
       result = await model.generateContent(prompt)
     } catch (e) {
-      console.error(`${ROUTE} STEP 6: generateContent() 예외 (네트워크/API/모델명 등)`, e)
-      throw e
+      console.error(`${ROUTE} STEP 6: generateContent() 예외`, e)
+      return jsonError(502, e, lastStep)
     }
     log('STEP 6: model.generateContent() 완료')
 
-    // SDK 응답 메타(차단·finishReason 등) — text() 전에 확인
+    lastStep = 'STEP 7: candidates'
     try {
       const candidates = result.response.candidates
       log('STEP 7: Gemini candidates (raw)', JSON.stringify(candidates, null, 2))
@@ -81,54 +179,53 @@ export async function POST(req: NextRequest) {
       console.error(`${ROUTE} STEP 7: candidates 직렬화 실패`, e)
     }
 
+    lastStep = 'STEP 8: response.text()'
     let rawText: string
     try {
       rawText = result.response.text()
     } catch (e) {
-      console.error(
-        `${ROUTE} STEP 8: response.text() 실패 (차단/빈 응답 등에서 자주 발생)`,
-        e,
-      )
-      throw e
+      console.error(`${ROUTE} STEP 8: response.text() 실패`, e)
+      return jsonError(502, e, lastStep)
     }
 
-    // 가공 전 원문 그대로 (요청하신 Raw Response)
     console.log(`${ROUTE} STEP 8: Gemini Raw Response (가공 전 전체 문자열):\n`, rawText)
 
-    const cleaned = rawText.replace(/```json|```/g, '').trim()
-    log('STEP 9: markdown 제거 후 (parse 직전, 앞 800자)', cleaned.slice(0, 800))
+    lastStep = 'STEP 9: extractJsonOnly'
+    const cleaned = extractJsonOnly(rawText)
+    log('STEP 9: JSON 추출 후 (parse 직전, 앞 800자)', cleaned.slice(0, 800))
 
+    lastStep = 'STEP 10: JSON.parse'
     let analysis: unknown
     try {
       analysis = JSON.parse(cleaned)
     } catch (e) {
-      console.error(
-        `${ROUTE} STEP 10: JSON.parse 실패 — 모델이 순수 JSON이 아닌 문자열을 반환했을 가능성`,
-        e,
-      )
+      console.error(`${ROUTE} STEP 10: JSON.parse 실패`, e)
       console.error(`${ROUTE} STEP 10: parse 대상 전체:\n`, cleaned)
-      throw e
+      return jsonError(422, {
+        message: '모델 응답을 JSON으로 파싱할 수 없습니다',
+        code: 'JSON_PARSE',
+        details: cleaned.slice(0, 500),
+      }, lastStep)
     }
 
-    log('STEP 11: daily_logs upsert')
+    lastStep = 'STEP 11: daily_logs upsert'
+    log(lastStep)
     const { error: upsertError } = await supabase.from('daily_logs').upsert(
       { user_id: user.id, date, meal_analysis: analysis },
       { onConflict: 'user_id,date' },
     )
     if (upsertError) {
       console.error(`${ROUTE} STEP 11: upsert error`, upsertError)
-      throw upsertError
+      return jsonError(500, upsertError, lastStep)
     }
 
-    log('STEP 12: 성공 → 200')
-    return NextResponse.json(analysis)
+    lastStep = 'STEP 12: success'
+    log(`${lastStep} → 200`)
+    return NextResponse.json(analysis, {
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+    })
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err)
-    const stack = err instanceof Error ? err.stack : undefined
-    console.error(`${ROUTE} CATCH: 최종 예외`, { message, stack })
-    return NextResponse.json(
-      { error: message, step: 'see server logs for STEP n' },
-      { status: 500 },
-    )
+    console.error(`${ROUTE} CATCH: 예상 밖 예외`, { lastStep, err })
+    return jsonError(500, err, lastStep)
   }
 }
