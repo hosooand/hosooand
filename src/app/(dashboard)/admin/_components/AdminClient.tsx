@@ -2,7 +2,7 @@
 
 import EmptyState from '@/components/ui/EmptyState'
 import { SkeletonList, SkeletonCard } from '@/components/ui/Skeleton'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Image from 'next/image'
 import type { DailyLog } from '@/types/diary'
@@ -160,6 +160,49 @@ export default function AdminClient({ members: initialMembers, staffId, initialN
   const [excelRange,      setExcelRange]      = useState(getDefaultDateRange())
   const [showExcelPanel,  setShowExcelPanel]  = useState(false)
   const [downloadingExcel, setDownloadingExcel] = useState(false)
+
+  const [excelRangeHasMeal,      setExcelRangeHasMeal]      = useState<boolean | null>(null)
+  const [checkingExcelRangeMeal, setCheckingExcelRangeMeal] = useState(false)
+
+  // 선택된 회원(selected)에 대해, 현재 excelRange(시작일~종료일) 기간 내 meal_entries 존재 여부를 실시간 갱신
+  useEffect(() => {
+    if (!selected) return
+    if (!showExcelPanel) return
+    if (!excelRange.from || !excelRange.to) return
+
+    let cancelled = false
+    setCheckingExcelRangeMeal(true)
+    setExcelRangeHasMeal(null)
+
+    const t = window.setTimeout(async () => {
+      try {
+        const { data, error } = await supabase
+          .from('daily_logs')
+          .select('meal_entries')
+          .eq('user_id', selected.id)
+          .gte('date', excelRange.from)
+          .lte('date', excelRange.to)
+
+        if (cancelled) return
+        if (error) throw error
+
+        const has = (data ?? []).some(row =>
+          mealEntriesHasRecords((row as { meal_entries: unknown }).meal_entries),
+        )
+        setExcelRangeHasMeal(has)
+      } catch (e) {
+        console.error('[AdminClient] excelRange meal check failed', e)
+        if (!cancelled) setExcelRangeHasMeal(false)
+      } finally {
+        if (!cancelled) setCheckingExcelRangeMeal(false)
+      }
+    }, 300)
+
+    return () => {
+      cancelled = true
+      clearTimeout(t)
+    }
+  }, [selected?.id, excelRange.from, excelRange.to, showExcelPanel])
 
   const filtered = (members ?? []).filter(m =>
     m.name?.toLowerCase().includes(search.toLowerCase()) ||
@@ -503,6 +546,22 @@ export default function AdminClient({ members: initialMembers, staffId, initialN
                       className="w-full h-[38px] px-3 rounded-[8px] border border-gray-200
                         text-[13px] text-gray-800 outline-none focus:border-emerald-400 transition-all" />
                   </div>
+                </div>
+
+                {/* 기간별 식단 기록 여부 */}
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-[12px] text-gray-500 font-medium">선택 기간 식단 기록</p>
+                  {checkingExcelRangeMeal ? (
+                    <span className="text-[11px] text-gray-400">확인 중...</span>
+                  ) : excelRangeHasMeal ? (
+                    <span className="inline-flex shrink-0 whitespace-nowrap rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-semibold text-emerald-800">
+                      🟢 식단 기록 있음
+                    </span>
+                  ) : (
+                    <span className="inline-flex shrink-0 whitespace-nowrap rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-[11px] font-semibold text-rose-800">
+                      🔴 식단 미기록
+                    </span>
+                  )}
                 </div>
 
                 {/* 빠른 선택 */}
