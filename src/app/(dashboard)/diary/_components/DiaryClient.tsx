@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition, useEffect, useRef } from 'react'
+import { useState, useTransition, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -84,7 +84,6 @@ export default function DiaryClient({ date, initialLog, profile, userId }: Props
   const [isPending, startTransition] = useTransition()
   const [mealEntries, setMealEntries] = useState<MealPanelEntry[]>(() => extractMealEntries(initialLog))
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
-  const dateInputRef = useRef<HTMLInputElement>(null)
 
   const { register, handleSubmit, watch, setValue, reset, formState: { errors } } =
     useForm<DailyLogFormValues>({
@@ -165,20 +164,6 @@ export default function DiaryClient({ date, initialLog, profile, userId }: Props
     router.push(`/diary?date=${nextDate}`)
   }
 
-  function openNativeDatePicker() {
-    const el = dateInputRef.current
-    if (!el) return
-    try {
-      if (typeof el.showPicker === 'function') {
-        el.showPicker()
-        return
-      }
-    } catch {
-      // 일부 브라우저는 showPicker()가 거부될 수 있음
-    }
-    el.click()
-  }
-
   return (
     <div className="min-h-screen bg-[#FFF8FB]">
 
@@ -196,23 +181,23 @@ export default function DiaryClient({ date, initialLog, profile, userId }: Props
               <ChevronLeft size={18} />
             </button>
             <div className="text-center relative inline-flex flex-col items-center">
-              <button
-                type="button"
-                onClick={openNativeDatePicker}
-                className="text-[15px] font-semibold text-gray-800 leading-none hover:text-pink-600 transition-colors"
-              >
-                {formatDateKo(date)}
-              </button>
-              <input
-                ref={dateInputRef}
-                type="date"
-                value={date}
-                max={new Date().toLocaleDateString('en-CA')}
-                onChange={(e) => handleDatePick(e.target.value)}
-                className="sr-only"
-                tabIndex={-1}
-                aria-hidden="true"
-              />
+              {/*
+                버튼 + showPicker()/click()은 일부 브라우저에서 "직접 사용자 제스처가 input에 닿지 않음"으로 달력이 안 뜸.
+                투명 date input을 날짜 텍스트 위에 올려 클릭이 곧바로 input에 전달되게 함 (role 무관, 동일 동작).
+              */}
+              <label className="group relative inline-flex min-h-[22px] cursor-pointer items-center justify-center px-1">
+                <span className="text-[15px] font-semibold text-gray-800 leading-none select-none pointer-events-none group-hover:text-pink-600">
+                  {formatDateKo(date)}
+                </span>
+                <input
+                  type="date"
+                  value={date}
+                  max={new Date().toLocaleDateString('en-CA')}
+                  onChange={(e) => handleDatePick(e.target.value)}
+                  className="absolute inset-0 z-[1] h-full w-full cursor-pointer opacity-0"
+                  aria-label="다이어리 날짜 선택"
+                />
+              </label>
               {isToday(date) && <span className="text-[11px] text-pink-500 font-medium">오늘</span>}
             </div>
             <button type="button" onClick={() => goDate(1)} disabled={isToday(date)}
