@@ -100,7 +100,16 @@ export default function SignupPage() {
       await supabase.from('profiles').insert({ id: data.user.id, name, role: 'member' })
     }
 
+    // 가입 직후 남은 세션/쿠키로 인해 바로 로그인 시 오인증이 나는 경우 방지
+    try {
+      await supabase.auth.signOut()
+    } catch (e) {
+      console.error(e)
+    }
+
+    setLoading(false)
     router.push('/login')
+    router.refresh()
   }
 
   const inputClass = (err?: string) =>
