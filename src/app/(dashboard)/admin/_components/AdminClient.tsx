@@ -418,9 +418,6 @@ export default function AdminClient({ members: initialMembers, staffId, initialN
                       </span>
                     )}
                   </div>
-                  <div className="mt-1.5">
-                    <MealLogStatusBadge hasLog={hasMeal} />
-                  </div>
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-gray-400">
                     {member.current_weight != null && member.current_weight !== 0 && (
                       <span>{member.current_weight}kg</span>
