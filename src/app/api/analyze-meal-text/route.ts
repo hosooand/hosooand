@@ -19,7 +19,8 @@ import { createServerSupabaseClient } from '@/lib/supabase/server'
  */
 
 const ROUTE = '[analyze-meal-text]'
-const DEFAULT_MODEL = 'gemini-2.0-flash'
+// gemini-1.5-flash: 현재 가장 안정적인 모델(기본값)로 운영합니다.
+const DEFAULT_MODEL = 'gemini-1.5-flash'
 const ENV_MODEL = process.env.GEMINI_MODEL
 
 // `gemini-flash-lite-latest`는 Gemini API에서 모델 ID로 문서에서 확인되지 않아,
