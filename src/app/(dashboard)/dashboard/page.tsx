@@ -76,9 +76,7 @@ export default async function DashboardPage() {
         <Image src="/duck.png" alt="통통이" width={60} height={60}
           className="object-contain flex-shrink-0" />
         <div>
-          <p className="text-[14px] font-semibold text-pink-600 mb-0.5">
-            통통이의 오늘의 한마디 🏋️
-          </p>
+          <p className="text-[14px] font-semibold text-pink-600 mb-0.5">통통이의 한마디 🏋️</p>
           <p className="text-[13px] text-gray-500 leading-relaxed">
             오늘 식단 기록했나요? 작은 습관이 큰 변화를 만들어요!
           </p>
