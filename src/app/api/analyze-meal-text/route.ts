@@ -11,8 +11,8 @@ import { createServerSupabaseClient } from '@/lib/supabase/server'
  * - NEXT_PUBLIC_SUPABASE_ANON_KEY … Supabase anon 키
  *
  * 【선택】
- * - GEMINI_MODEL … 기본값: gemini-2.0-flash (없으면 이 값 사용)
- *   예: gemini-2.0-flash, gemini-1.5-flash, gemini-2.5-flash-preview-05-20 등
+ * - GEMINI_MODEL … 기본값: gemini-1.5-flash (없으면 이 값 사용)
+ *   예: gemini-1.5-flash, gemini-2.5-flash-preview-05-20 등
  *
  * Vercel 대시보드: Project → Settings → Environment Variables 에서
  * Production / Preview / Development 각각 동일하게 등록했는지 확인하세요.
