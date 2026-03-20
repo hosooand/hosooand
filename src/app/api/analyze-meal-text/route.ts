@@ -11,16 +11,16 @@ import { createServerSupabaseClient } from '@/lib/supabase/server'
  * - NEXT_PUBLIC_SUPABASE_ANON_KEY … Supabase anon 키
  *
  * 【선택】
- * - GEMINI_MODEL … 기본값: gemini-1.5-flash (없으면 이 값 사용)
- *   예: gemini-1.5-flash, gemini-2.5-flash-preview-05-20 등
+ * - GEMINI_MODEL … 기본값: gemini-2.5-flash (없으면 이 값 사용)
+ *   예: gemini-2.5-flash, gemini-2.5-flash-preview-05-20 등
  *
  * Vercel 대시보드: Project → Settings → Environment Variables 에서
  * Production / Preview / Development 각각 동일하게 등록했는지 확인하세요.
  */
 
 const ROUTE = '[analyze-meal-text]'
-// gemini-1.5-flash: 현재 가장 안정적인 모델(기본값)로 운영합니다.
-const DEFAULT_MODEL = 'gemini-1.5-flash'
+// gemini-2.5-flash: 최신 운영 기본 모델로 사용합니다.
+const DEFAULT_MODEL = 'gemini-2.5-flash'
 const ENV_MODEL = process.env.GEMINI_MODEL
 
 // `gemini-flash-lite-latest`는 Gemini API에서 모델 ID로 문서에서 확인되지 않아,
