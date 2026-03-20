@@ -17,6 +17,8 @@ interface Member {
   avatar:         string | null
   created_at:     string
   member_number:  string | null
+  /** 최근 30일 daily_logs에 meal_entries(배열)가 1건 이상 있는지 */
+  has_recent_meal_entries?: boolean
 }
 
 interface StaffNote {
@@ -68,6 +70,46 @@ function getDefaultDateRange() {
   const from = new Date()
   from.setDate(from.getDate() - 30)
   return { from: from.toLocaleDateString('en-CA'), to }
+}
+
+/** 최근 30일 내 meal_entries 배열이 비어 있지 않은 user_id 집합 */
+function userIdsWithMealEntriesInLogs(
+  logs: { user_id: string; meal_entries: unknown }[] | null,
+): Set<string> {
+  const set = new Set<string>()
+  for (const row of logs ?? []) {
+    const me = row.meal_entries
+    if (Array.isArray(me) && me.length > 0) set.add(row.user_id)
+  }
+  return set
+}
+
+async function fetchMembersWithMealFlags(supabase: ReturnType<typeof createClient>) {
+  const { data: rows } = await supabase
+    .from('profiles')
+    .select('id, name, height, current_weight, avatar, created_at, member_number')
+    .eq('role', 'member')
+    .order('created_at', { ascending: false })
+
+  const list = rows ?? []
+  const ids = list.map(m => m.id)
+  if (ids.length === 0) return list.map(m => ({ ...m, has_recent_meal_entries: false }))
+
+  const from = new Date()
+  from.setDate(from.getDate() - 30)
+  const fromStr = from.toLocaleDateString('en-CA')
+
+  const { data: logs } = await supabase
+    .from('daily_logs')
+    .select('user_id, meal_entries')
+    .gte('date', fromStr)
+    .in('user_id', ids)
+
+  const withMeals = userIdsWithMealEntriesInLogs(logs ?? [])
+  return list.map(m => ({
+    ...m,
+    has_recent_meal_entries: withMeals.has(m.id),
+  }))
 }
 
 export default function AdminClient({ members: initialMembers, staffId, initialNotes, staffName }: Props) {
@@ -208,13 +250,8 @@ export default function AdminClient({ members: initialMembers, staffId, initialN
       return
     }
 
-    const { data } = await supabase
-      .from('profiles')
-      .select('id, name, height, current_weight, avatar, created_at, member_number')
-      .eq('role', 'member')
-      .order('created_at', { ascending: false })
-
-    setMembers(data ?? [])
+    const withFlags = await fetchMembersWithMealFlags(supabase)
+    setMembers(withFlags)
     setShowModal(false)
     setNewName('')
     setNewEmail('')
@@ -323,13 +360,16 @@ export default function AdminClient({ members: initialMembers, staffId, initialN
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center gap-2 mt-0.5">
+                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                     {member.current_weight && (
                       <span className="text-[12px] text-gray-400">{member.current_weight}kg</span>
                     )}
                     {member.height && (
                       <span className="text-[12px] text-gray-400">{member.height}cm</span>
                     )}
+                    <span className={`text-[11px] font-medium ${member.has_recent_meal_entries === true ? 'text-emerald-600' : 'text-rose-500'}`}>
+                      {member.has_recent_meal_entries === true ? '🟢 식단 기록 있음' : '🔴 식단 미기록'}
+                    </span>
                   </div>
                 </div>
                 <BMIBadge bmi={bmi} />
@@ -432,7 +472,7 @@ export default function AdminClient({ members: initialMembers, staffId, initialN
                       max={excelRange.to}
                       onChange={e => setExcelRange(prev => ({ ...prev, from: e.target.value }))}
                       className="w-full h-[38px] px-3 rounded-[8px] border border-gray-200
-                        text-[13px] outline-none focus:border-emerald-400 transition-all" />
+                        text-[13px] text-gray-800 outline-none focus:border-emerald-400 transition-all" />
                   </div>
                   <div>
                     <label className="block text-[11px] text-gray-400 mb-1">종료일</label>
@@ -441,7 +481,7 @@ export default function AdminClient({ members: initialMembers, staffId, initialN
                       max={new Date().toLocaleDateString('en-CA')}
                       onChange={e => setExcelRange(prev => ({ ...prev, to: e.target.value }))}
                       className="w-full h-[38px] px-3 rounded-[8px] border border-gray-200
-                        text-[13px] outline-none focus:border-emerald-400 transition-all" />
+                        text-[13px] text-gray-800 outline-none focus:border-emerald-400 transition-all" />
                   </div>
                 </div>
 

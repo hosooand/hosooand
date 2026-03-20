@@ -20,6 +20,7 @@ interface Member {
   avatar:         string | null
   created_at:     string
   member_number:  string | null
+  has_recent_meal_entries?: boolean
 }
 
 export default async function AdminPage() {
@@ -47,6 +48,31 @@ export default async function AdminPage() {
   console.log('DB에서 조회한 고객 데이터:', members)
   console.log('고객 조회 에러:', membersError)
 
+  // 최근 30일 daily_logs 중 meal_entries가 있는 회원 표시용
+  const memberList = members ?? []
+  const memberIds = memberList.map(m => m.id)
+  const mealUserIds = new Set<string>()
+  if (memberIds.length > 0) {
+    const from = new Date()
+    from.setDate(from.getDate() - 30)
+    const fromStr = from.toLocaleDateString('en-CA')
+    const { data: mealLogs } = await supabase
+      .from('daily_logs')
+      .select('user_id, meal_entries')
+      .gte('date', fromStr)
+      .in('user_id', memberIds)
+
+    for (const row of mealLogs ?? []) {
+      const me = row.meal_entries as unknown
+      if (Array.isArray(me) && me.length > 0) mealUserIds.add(row.user_id)
+    }
+  }
+
+  const membersWithMealFlag: Member[] = memberList.map(m => ({
+    ...m,
+    has_recent_meal_entries: mealUserIds.has(m.id),
+  }))
+
   // 메모 조회 — foreign key join 없이 단순 조회
   const { data: notesRaw, error: notesError } = await supabase
     .from('staff_notes')
@@ -66,7 +92,7 @@ export default async function AdminPage() {
 
   return (
     <AdminClient
-      members={(members ?? []) as Member[]}
+      members={membersWithMealFlag}
       staffId={profile.id}
       initialNotes={notes}
     />
