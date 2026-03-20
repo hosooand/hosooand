@@ -77,7 +77,7 @@ export default function LoginPage() {
             onChange={e => { setEmail(e.target.value); setErrors(p => ({ ...p, email: undefined })) }}
             placeholder="example@email.com"
             autoComplete="email"
-            className={`w-full h-[50px] px-4 rounded-[10px] border text-[15px] outline-none transition-all
+            className={`w-full h-[50px] px-4 rounded-[10px] border text-[15px] text-gray-800 outline-none transition-all
               ${errors.email
                 ? 'border-rose-400 ring-2 ring-rose-100'
                 : 'border-gray-200 focus:border-pink-400 focus:ring-2 focus:ring-pink-100'}`}
@@ -95,7 +95,7 @@ export default function LoginPage() {
               onChange={e => { setPassword(e.target.value); setErrors(p => ({ ...p, password: undefined })) }}
               placeholder="비밀번호를 입력하세요"
               autoComplete="current-password"
-              className={`w-full h-[50px] px-4 pr-11 rounded-[10px] border text-[15px] outline-none transition-all
+              className={`w-full h-[50px] px-4 pr-11 rounded-[10px] border text-[15px] text-gray-800 outline-none transition-all
                 ${errors.password
                   ? 'border-rose-400 ring-2 ring-rose-100'
                   : 'border-gray-200 focus:border-pink-400 focus:ring-2 focus:ring-pink-100'}`}
