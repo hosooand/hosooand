@@ -45,16 +45,48 @@ export async function upsertDailyLog(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('로그인이 필요합니다')
 
+  const { meal_entries, ...rest } = values as typeof values & { meal_entries?: unknown }
+  const mealEntriesIsArray = Array.isArray(meal_entries)
+
+  console.log('[upsertDailyLog] before upsert', {
+    date: values.date,
+    meal_entries_present: meal_entries !== undefined,
+    meal_entries_type: meal_entries == null ? String(meal_entries) : typeof meal_entries,
+    meal_entries_is_array: mealEntriesIsArray,
+    meal_entries_length: mealEntriesIsArray ? meal_entries.length : null,
+  })
+
+  const payload = {
+    ...rest,
+    meal_entries: meal_entries ?? [],
+    user_id: user.id,
+  }
+
   const { data, error } = await supabase
     .from('daily_logs')
     .upsert(
-      { ...values, user_id: user.id },
+      payload,
       { onConflict: 'user_id,date' }
     )
     .select()
     .single()
 
-  if (error) throw new Error(error.message)
+  if (error) {
+    console.error('[upsertDailyLog] upsert error', { message: error.message, details: error })
+    throw new Error(error.message)
+  }
+
+  console.log('[upsertDailyLog] after upsert', {
+    returned_meal_entries_present: (data as unknown as { meal_entries?: unknown }).meal_entries !== undefined,
+    returned_meal_entries_type:
+      (data as unknown as { meal_entries?: unknown }).meal_entries == null
+        ? String((data as unknown as { meal_entries?: unknown }).meal_entries)
+        : typeof (data as unknown as { meal_entries?: unknown }).meal_entries,
+    returned_meal_entries_is_array: Array.isArray((data as unknown as { meal_entries?: unknown }).meal_entries),
+    returned_meal_entries_length: Array.isArray((data as unknown as { meal_entries?: unknown }).meal_entries)
+      ? (data as unknown as { meal_entries?: unknown }).meal_entries?.length ?? null
+      : null,
+  })
   return data
 }
 

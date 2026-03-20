@@ -143,6 +143,20 @@ export default function DiaryClient({ date, initialLog, profile, userId }: Props
   function onSubmit(values: DailyLogFormValues) {
     startTransition(async () => {
       try {
+        console.log('[DiaryClient] onSubmit payload check', {
+          date,
+          meal_entries_len: mealEntries?.length ?? 0,
+          meal_entries_any: (mealEntries ?? []).some(e => e?.meal_type != null),
+          meal_entries_first: (mealEntries ?? [])[0]
+            ? {
+                meal_type: (mealEntries ?? [])[0]?.meal_type,
+                time: (mealEntries ?? [])[0]?.time,
+                has_image_url: Boolean((mealEntries ?? [])[0]?.image_url),
+                has_content: Boolean((mealEntries ?? [])[0]?.content),
+                has_analysis: Boolean((mealEntries ?? [])[0]?.analysis),
+              }
+            : null,
+        })
         await upsertDailyLog({ ...values, date, meal_entries: mealEntries })
         setToast({ message: '오늘의 기록이 저장됐어요 ✅', type: 'success' })
       } catch (e) {
