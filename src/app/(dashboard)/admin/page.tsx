@@ -1,6 +1,7 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import AdminClient from './_components/AdminClient'
+import { mealEntriesHasRecords } from '@/lib/meal-entries'
 
 interface StaffNote {
   id:         string
@@ -63,8 +64,7 @@ export default async function AdminPage() {
       .in('user_id', memberIds)
 
     for (const row of mealLogs ?? []) {
-      const me = row.meal_entries as unknown
-      if (Array.isArray(me) && me.length > 0) mealUserIds.add(row.user_id)
+      if (mealEntriesHasRecords(row.meal_entries)) mealUserIds.add(row.user_id)
     }
   }
 

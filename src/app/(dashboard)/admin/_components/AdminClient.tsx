@@ -8,6 +8,7 @@ import Image from 'next/image'
 import type { DailyLog } from '@/types/diary'
 import { createMember } from '@/app/actions/admin'
 import { generateMemberExcel } from '@/lib/export'
+import { mealEntriesHasRecords } from '@/lib/meal-entries'
 
 interface Member {
   id:             string
@@ -50,6 +51,20 @@ function getBMI(height: number | null, weight: number | null) {
   return weight / Math.pow(height / 100, 2)
 }
 
+function MealLogStatusBadge({ hasLog }: { hasLog: boolean }) {
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
+        hasLog
+          ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+          : 'border-rose-200 bg-rose-50 text-rose-800'
+      }`}
+    >
+      {hasLog ? '🟢 식단 기록 있음' : '🔴 식단 미기록'}
+    </span>
+  )
+}
+
 function BMIBadge({ bmi }: { bmi: number | null }) {
   if (!bmi) return <span className="text-[11px] text-gray-300">-</span>
   const { label, color } =
@@ -78,8 +93,7 @@ function userIdsWithMealEntriesInLogs(
 ): Set<string> {
   const set = new Set<string>()
   for (const row of logs ?? []) {
-    const me = row.meal_entries
-    if (Array.isArray(me) && me.length > 0) set.add(row.user_id)
+    if (mealEntriesHasRecords(row.meal_entries)) set.add(row.user_id)
   }
   return set
 }
@@ -341,18 +355,19 @@ export default function AdminClient({ members: initialMembers, staffId, initialN
           )}
           {filtered.map(member => {
             const bmi = getBMI(member.height, member.current_weight)
+            const hasMeal = member.has_recent_meal_entries === true
             return (
               <button key={member.id} type="button"
                 onClick={() => openMember(member)}
                 className="w-full bg-white rounded-[16px] border border-pink-100
                   p-4 shadow-sm hover:shadow-md hover:-translate-y-0.5
-                  transition-all text-left flex items-center gap-3">
-                <div className="relative w-10 h-10 flex-shrink-0">
+                  transition-all text-left flex items-stretch gap-3">
+                <div className="relative w-10 h-10 flex-shrink-0 self-center">
                   <Image src={AVATARS[member.avatar ?? 'duck'] ?? '/duck.png'}
                     alt={member.name} fill className="object-contain" />
                 </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
+                <div className="flex-1 min-w-0 overflow-visible">
+                  <div className="flex flex-wrap items-center gap-2">
                     <p className="text-[14px] font-semibold text-gray-800">{member.name}</p>
                     {member.member_number && (
                       <span className="text-[11px] text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
@@ -360,20 +375,25 @@ export default function AdminClient({ members: initialMembers, staffId, initialN
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                    {member.current_weight && (
-                      <span className="text-[12px] text-gray-400">{member.current_weight}kg</span>
+                  <div className="mt-1.5">
+                    <MealLogStatusBadge hasLog={hasMeal} />
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-gray-400">
+                    {member.current_weight != null && member.current_weight !== 0 && (
+                      <span>{member.current_weight}kg</span>
                     )}
-                    {member.height && (
-                      <span className="text-[12px] text-gray-400">{member.height}cm</span>
+                    {member.height != null && member.height !== 0 && (
+                      <span>{member.height}cm</span>
                     )}
-                    <span className={`text-[11px] font-medium ${member.has_recent_meal_entries === true ? 'text-emerald-600' : 'text-rose-500'}`}>
-                      {member.has_recent_meal_entries === true ? '🟢 식단 기록 있음' : '🔴 식단 미기록'}
-                    </span>
                   </div>
                 </div>
-                <BMIBadge bmi={bmi} />
-                <span className="text-gray-300 text-[16px]">›</span>
+                <div className="flex flex-shrink-0 flex-col items-end justify-center gap-1.5 self-center">
+                  <MealLogStatusBadge hasLog={hasMeal} />
+                  <div className="flex items-center gap-1">
+                    <BMIBadge bmi={bmi} />
+                    <span className="text-gray-300 text-[16px] leading-none">›</span>
+                  </div>
+                </div>
               </button>
             )
           })}
