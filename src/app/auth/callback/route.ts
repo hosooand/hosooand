@@ -1,5 +1,6 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import type { EmailOtpType } from '@supabase/supabase-js'
 
 /** code 없음·교환 실패 시 — 비밀번호 재설정 링크 오류는 /login 이 아니라 여기서 안내 */
 function recoveryTokenErrorPath(origin: string) {
@@ -7,9 +8,10 @@ function recoveryTokenErrorPath(origin: string) {
 }
 
 /**
- * OAuth / 이메일 링크(PKCE code) 공통 콜백.
- * setAll에서 넘어온 name/value/options를 리다이렉트 응답에 그대로 복사해야
- * exchangeCodeForSession 직후 세션 쿠키가 브라우저에 저장됩니다.
+ * OAuth / 이메일 링크 공통 콜백.
+ * - ?code= : PKCE → exchangeCodeForSession
+ * - ?token=…&type=recovery : 이메일 링크 → verifyOtp({ token_hash, type })
+ * setAll에서 넘어온 name/value/options를 리다이렉트 응답에 그대로 복사해야 세션 쿠키가 저장됩니다.
  */
 function decodeJwtPayload(accessToken: string): Record<string, unknown> | null {
   try {
@@ -48,9 +50,26 @@ function isRecoveryFromAccessToken(accessToken: string): boolean {
   })
 }
 
+const EMAIL_OTP_TYPES: EmailOtpType[] = [
+  'signup',
+  'invite',
+  'magiclink',
+  'recovery',
+  'email_change',
+  'email',
+]
+
+function resolveOtpType(typeParam: string | null): EmailOtpType {
+  if (typeParam && EMAIL_OTP_TYPES.includes(typeParam as EmailOtpType)) {
+    return typeParam as EmailOtpType
+  }
+  return 'recovery'
+}
+
 export async function GET(request: NextRequest) {
   const url = new URL(request.url)
   const code = url.searchParams.get('code')
+  const token = url.searchParams.get('token')
   const nextRaw = url.searchParams.get('next')
   const next = nextRaw ?? '/'
   const type = url.searchParams.get('type')
@@ -59,10 +78,11 @@ export async function GET(request: NextRequest) {
   const isPasswordRecoveryFromQuery =
     type === 'recovery' ||
     next === '/reset-password' ||
-    next.endsWith('/reset-password')
+    next.endsWith('/reset-password') ||
+    (!!token && !code && (type === 'recovery' || type === null))
 
-  if (!code) {
-    console.error('[auth/callback] ?code= 없음 — Redirect URLs·redirectTo 불일치 가능')
+  if (!code && !token) {
+    console.error('[auth/callback] code 또는 token 없음 — Redirect URLs·이메일 링크 형식 확인')
     return NextResponse.redirect(recoveryTokenErrorPath(origin))
   }
 
@@ -87,7 +107,19 @@ export async function GET(request: NextRequest) {
     }
   )
 
-  const { error } = await supabase.auth.exchangeCodeForSession(code)
+  let error: { message: string } | null = null
+
+  if (code) {
+    const { error: exErr } = await supabase.auth.exchangeCodeForSession(code)
+    error = exErr
+  } else if (token) {
+    const otpType = resolveOtpType(type)
+    const { error: otpErr } = await supabase.auth.verifyOtp({
+      token_hash: token,
+      type: otpType,
+    })
+    error = otpErr
+  }
 
   if (error) {
     console.error('Auth Callback Error:', error.message)
