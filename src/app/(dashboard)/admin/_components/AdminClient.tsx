@@ -9,6 +9,7 @@ import type { DailyLog } from '@/types/diary'
 import { createMember } from '@/app/actions/admin'
 import { generateMemberExcel } from '@/lib/export'
 import { mealEntriesHasRecords } from '@/lib/meal-entries'
+import Link from 'next/link'
 
 interface Member {
   id:             string
@@ -37,6 +38,7 @@ interface Props {
   staffId:      string
   initialNotes: StaffNote[]
   staffName?:   string
+  viewerRole?:  string
 }
 
 const AVATARS: Record<string, string> = {
@@ -126,7 +128,7 @@ async function fetchMembersWithMealFlags(supabase: ReturnType<typeof createClien
   }))
 }
 
-export default function AdminClient({ members: initialMembers, staffId, initialNotes, staffName }: Props) {
+export default function AdminClient({ members: initialMembers, staffId, initialNotes, staffName, viewerRole }: Props) {
   const supabase = createClient()
 
   const [members,      setMembers]      = useState<Member[]>(initialMembers ?? [])
@@ -360,18 +362,31 @@ export default function AdminClient({ members: initialMembers, staffId, initialN
     <div className="max-w-2xl mx-auto px-4 pt-6 pb-24">
 
       {/* 헤더 */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 gap-3">
         <div>
           <h1 className="text-[22px] font-semibold text-gray-800">고객 관리</h1>
           <p className="text-[14px] text-gray-400 mt-1">총 {members.length}명의 고객</p>
         </div>
-        <button type="button" onClick={() => setShowModal(true)}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-full
-            bg-gradient-to-r from-pink-500 to-rose-400 text-white
-            text-[13px] font-semibold shadow-[0_3px_10px_rgba(236,72,153,0.3)]
-            hover:-translate-y-0.5 transition-all">
-          + 신규 등록
-        </button>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {viewerRole === 'admin' && (
+            <Link
+              href="/admin/users"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-full
+                border border-pink-200 bg-white text-pink-600
+                text-[13px] font-semibold shadow-sm
+                hover:bg-pink-50 transition-all"
+            >
+              직원 승인
+            </Link>
+          )}
+          <button type="button" onClick={() => setShowModal(true)}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-full
+              bg-gradient-to-r from-pink-500 to-rose-400 text-white
+              text-[13px] font-semibold shadow-[0_3px_10px_rgba(236,72,153,0.3)]
+              hover:-translate-y-0.5 transition-all">
+            + 신규 등록
+          </button>
+        </div>
       </div>
 
       {/* 검색 */}

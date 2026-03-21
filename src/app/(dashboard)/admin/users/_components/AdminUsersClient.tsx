@@ -5,18 +5,21 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { createStaffByAdmin } from '@/app/actions/admin'
 import type { PendingUser } from '../page'
-import { CheckCircle2, Users, Loader2, UserPlus } from 'lucide-react'
+import { CheckCircle2, Users, Loader2, UserPlus, UserMinus } from 'lucide-react'
 
 interface Props {
-  initialUsers: PendingUser[]
+  initialPending:  PendingUser[]
+  initialApproved: PendingUser[]
 }
 
-export default function AdminUsersClient({ initialUsers }: Props) {
+export default function AdminUsersClient({ initialPending, initialApproved }: Props) {
   const router = useRouter()
   const supabase = createClient()
-  const [users, setUsers] = useState<PendingUser[]>(initialUsers)
+  const [pendingUsers, setPendingUsers] = useState<PendingUser[]>(initialPending)
+  const [approvedUsers, setApprovedUsers] = useState<PendingUser[]>(initialApproved)
   const [approving, setApproving] = useState<string | null>(null)
-  const [approved, setApproved] = useState<string[]>([])
+  const [revoking, setRevoking] = useState<string | null>(null)
+  const [approvedAnim, setApprovedAnim] = useState<string[]>([])
 
   const [staffName, setStaffName] = useState('')
   const [staffEmail, setStaffEmail] = useState('')
@@ -26,8 +29,12 @@ export default function AdminUsersClient({ initialUsers }: Props) {
   const [registerError, setRegisterError] = useState<string | null>(null)
 
   useEffect(() => {
-    setUsers(initialUsers)
-  }, [initialUsers])
+    setPendingUsers(initialPending)
+  }, [initialPending])
+
+  useEffect(() => {
+    setApprovedUsers(initialApproved)
+  }, [initialApproved])
 
   async function handleApprove(userId: string) {
     setApproving(userId)
@@ -39,16 +46,41 @@ export default function AdminUsersClient({ initialUsers }: Props) {
 
       if (error) throw error
 
-      setApproved(prev => [...prev, userId])
+      setApprovedAnim(prev => [...prev, userId])
       setTimeout(() => {
-        setUsers(prev => prev.filter(u => u.id !== userId))
-        setApproved(prev => prev.filter(id => id !== userId))
+        setPendingUsers(prev => {
+          const u = prev.find(x => x.id === userId)
+          if (u) setApprovedUsers(au => [u, ...au])
+          return prev.filter(x => x.id !== userId)
+        })
+        setApprovedAnim(prev => prev.filter(id => id !== userId))
       }, 800)
     } catch (e) {
       console.error('승인 실패:', e)
       alert('승인에 실패했어요. 다시 시도해주세요.')
     } finally {
       setApproving(null)
+    }
+  }
+
+  async function handleRevoke(user: PendingUser) {
+    setRevoking(user.id)
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ is_approved: false })
+        .eq('id', user.id)
+
+      if (error) throw error
+
+      setApprovedUsers(prev => prev.filter(u => u.id !== user.id))
+      setPendingUsers(prev => [user, ...prev])
+      router.refresh()
+    } catch (e) {
+      console.error('권한 박탈 실패:', e)
+      alert('권한 박탈에 실패했어요. 다시 시도해주세요.')
+    } finally {
+      setRevoking(null)
     }
   }
 
@@ -104,7 +136,7 @@ export default function AdminUsersClient({ initialUsers }: Props) {
         <div>
           <h1 className="text-[20px] font-bold text-gray-800">직원 승인 · 등록</h1>
           <p className="text-[13px] text-gray-400">
-            승인 대기 중인 직원 {users.length}명
+            승인 대기 {pendingUsers.length}명 · 승인됨 {approvedUsers.length}명
           </p>
         </div>
       </div>
@@ -195,22 +227,23 @@ export default function AdminUsersClient({ initialUsers }: Props) {
         </form>
       </div>
 
-      {/* 목록 */}
-      {users.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 gap-4">
-          <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center">
-            <CheckCircle2 size={32} className="text-emerald-500" />
+      {/* 승인 대기 */}
+      <h2 className="text-[14px] font-bold text-gray-700 mb-3">승인 대기</h2>
+      {pendingUsers.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-12 gap-3 mb-10 rounded-[16px] border border-dashed border-gray-200 bg-gray-50/50">
+          <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center">
+            <CheckCircle2 size={28} className="text-emerald-500" />
           </div>
-          <p className="text-[16px] font-semibold text-gray-700">승인 대기 직원이 없어요</p>
-          <p className="text-[13px] text-gray-400 text-center">
+          <p className="text-[15px] font-semibold text-gray-700">승인 대기 직원이 없어요</p>
+          <p className="text-[12px] text-gray-400 text-center px-4">
             위에서 직원을 등록하면 여기 목록에 표시됩니다
           </p>
         </div>
       ) : (
-        <div className="space-y-3">
-          {users.map(user => {
+        <div className="space-y-3 mb-10">
+          {pendingUsers.map(user => {
             const isApproving = approving === user.id
-            const isDone      = approved.includes(user.id)
+            const isDone      = approvedAnim.includes(user.id)
 
             return (
               <div key={user.id}
@@ -257,6 +290,64 @@ export default function AdminUsersClient({ initialUsers }: Props) {
                     <><Loader2 size={14} className="animate-spin" />승인 중</>
                   ) : (
                     '승인하기'
+                  )}
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* 승인된 직원 */}
+      <h2 className="text-[14px] font-bold text-gray-700 mb-3">승인된 직원</h2>
+      {approvedUsers.length === 0 ? (
+        <p className="text-[13px] text-gray-400 py-6 text-center rounded-[16px] border border-dashed border-gray-200 bg-gray-50/50">
+          아직 승인된 직원이 없어요
+        </p>
+      ) : (
+        <div className="space-y-3">
+          {approvedUsers.map(user => {
+            const isRevoking = revoking === user.id
+
+            return (
+              <div key={user.id}
+                className="bg-white rounded-[16px] border border-gray-100 p-4 shadow-sm
+                  flex items-center gap-3">
+
+                <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center
+                  justify-center text-slate-600 font-bold text-[16px] flex-shrink-0">
+                  {user.name?.[0] ?? '?'}
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-[14px] font-semibold text-gray-800 truncate">
+                      {user.name}
+                    </p>
+                    {user.member_number && (
+                      <span className="text-[11px] text-gray-400 bg-gray-100
+                        px-2 py-0.5 rounded-full flex-shrink-0">
+                        #{user.member_number}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[12px] text-gray-400 mt-0.5">
+                    가입일 {new Date(user.created_at).toLocaleDateString('ko-KR')}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleRevoke(user)}
+                  disabled={isRevoking}
+                  className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2
+                    rounded-full text-[13px] font-semibold transition-all
+                    border border-rose-200 bg-rose-50 text-rose-700
+                    hover:bg-rose-100 disabled:opacity-60 disabled:cursor-not-allowed">
+                  {isRevoking ? (
+                    <><Loader2 size={14} className="animate-spin" />처리 중</>
+                  ) : (
+                    <><UserMinus size={14} />권한 박탈</>
                   )}
                 </button>
               </div>

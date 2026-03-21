@@ -95,6 +95,7 @@ export default async function AdminPage() {
       members={membersWithMealFlag}
       staffId={profile.id}
       initialNotes={notes}
+      viewerRole={profile.role}
     />
   )
 }

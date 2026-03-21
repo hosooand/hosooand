@@ -34,5 +34,17 @@ export default async function AdminUsersPage() {
     .or('is_approved.eq.false,is_approved.is.null')
     .order('created_at', { ascending: false })
 
-  return <AdminUsersClient initialUsers={(pending ?? []) as PendingUser[]} />
+  const { data: approved } = await adminSb
+    .from('profiles')
+    .select('id, name, member_number, created_at')
+    .eq('role', 'staff')
+    .eq('is_approved', true)
+    .order('created_at', { ascending: false })
+
+  return (
+    <AdminUsersClient
+      initialPending={(pending ?? []) as PendingUser[]}
+      initialApproved={(approved ?? []) as PendingUser[]}
+    />
+  )
 }
