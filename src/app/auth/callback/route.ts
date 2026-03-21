@@ -7,6 +7,10 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get('code')
   const next = searchParams.get('next') ?? '/'
   const type = searchParams.get('type') // recovery, signup 등을 구분
+  const isRecoveryRedirect =
+    type === 'recovery' ||
+    next === '/reset-password' ||
+    next.endsWith('/reset-password')
 
   if (code) {
     const supabase = await createServerSupabaseClient()
@@ -14,7 +18,7 @@ export async function GET(request: NextRequest) {
     
     if (!error) {
       // 1. 비밀번호 재설정(recovery)인 경우 전용 페이지로 리다이렉트
-      if (type === 'recovery') {
+      if (isRecoveryRedirect) {
         return NextResponse.redirect(`${origin}/reset-password`)
       }
       

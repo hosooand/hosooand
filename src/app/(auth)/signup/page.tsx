@@ -97,7 +97,13 @@ export default function SignupPage() {
     }
 
     if (data.user) {
-      await supabase.from('profiles').insert({ id: data.user.id, name, role: 'member' })
+      const row: { id: string; name: string; role: Role; is_approved?: boolean } = {
+        id: data.user.id,
+        name,
+        role,
+      }
+      if (role === 'staff') row.is_approved = false
+      await supabase.from('profiles').insert(row)
     }
 
     // 가입 직후 남은 세션/쿠키로 인해 바로 로그인 시 오인증이 나는 경우 방지

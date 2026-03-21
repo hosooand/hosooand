@@ -1,4 +1,5 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin-client'
 import { redirect } from 'next/navigation'
 import AdminUsersClient from './_components/AdminUsersClient'
 
@@ -24,12 +25,13 @@ export default async function AdminUsersPage() {
 
   if (me?.role !== 'admin') redirect('/dashboard')
 
-  // 미승인 staff 목록 (최초 1회 승인 후 자유 로그인)
-  const { data: pending } = await supabase
+  // 미승인 staff 목록 — service role로 조회 (RLS가 타인 프로필 SELECT를 막는 경우 대비)
+  const adminSb = createAdminClient()
+  const { data: pending } = await adminSb
     .from('profiles')
     .select('id, name, member_number, created_at')
-    .eq('is_approved', false)
     .eq('role', 'staff')
+    .or('is_approved.eq.false,is_approved.is.null')
     .order('created_at', { ascending: false })
 
   return <AdminUsersClient initialUsers={(pending ?? []) as PendingUser[]} />
