@@ -2,89 +2,56 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import type { EmailOtpType } from '@supabase/supabase-js'
 
-/** code 없음·교환 실패 시 — 비밀번호 재설정 링크 오류는 /login 이 아니라 여기서 안내 */
-function recoveryTokenErrorPath(origin: string) {
-  return `${origin}/reset-password?error=expired`
-}
-
 /**
- * OAuth / 이메일 링크 공통 콜백.
- * - ?code= : PKCE → exchangeCodeForSession
- * - ?token=…&type=recovery : 이메일 링크 → verifyOtp({ token_hash, type })
- * setAll에서 넘어온 name/value/options를 리다이렉트 응답에 그대로 복사해야 세션 쿠키가 저장됩니다.
+ * Supabase Auth 콜백 (이메일 링크 / OAuth PKCE)
+ *
+ * 1) 이메일 링크(OTP): ?token_hash=…&type=… — verifyOtp({ token_hash, type })
+ *    - `token` 쿼리 이름으로 오는 경우도 token_hash 로 간주 (호환)
+ * 2) PKCE 폴백: ?code=… — exchangeCodeForSession(code)
+ *
+ * 세션 쿠키는 setAll 콜백으로 모은 뒤 리다이렉트 응답에 그대로 붙여야 브라우저에 저장됩니다.
  */
-function decodeJwtPayload(accessToken: string): Record<string, unknown> | null {
-  try {
-    const part = accessToken.split('.')[1]
-    if (!part) return null
-    const b64 = part.replace(/-/g, '+').replace(/_/g, '/')
-    const json = Buffer.from(b64, 'base64').toString('utf8')
-    return JSON.parse(json) as Record<string, unknown>
-  } catch {
-    return null
-  }
-}
 
-/** 비밀번호 재설정 세션: Supabase가 amr에 otp/password/recovery 등을 넣는 경우가 있음 */
-function isRecoveryFromAccessToken(accessToken: string): boolean {
-  const payload = decodeJwtPayload(accessToken)
-  if (!payload) return false
-  const amr = payload.amr
-  if (!Array.isArray(amr)) return false
-  return amr.some((entry: unknown) => {
-    if (entry === 'otp' || entry === 'recovery' || entry === 'password') return true
-    if (typeof entry === 'string') {
-      try {
-        const o = JSON.parse(entry) as { method?: string }
-        const m = o.method
-        return m === 'otp' || m === 'recovery' || m === 'password'
-      } catch {
-        return false
-      }
-    }
-    if (typeof entry === 'object' && entry !== null && 'method' in entry) {
-      const m = (entry as { method: string }).method
-      return m === 'otp' || m === 'recovery' || m === 'password'
-    }
-    return false
+function redirectWithCookies(
+  origin: string,
+  path: string,
+  pendingCookies: { name: string; value: string; options: CookieOptions }[],
+) {
+  const redirectResponse = NextResponse.redirect(`${origin}${path}`)
+  pendingCookies.forEach((c) => {
+    redirectResponse.cookies.set(c.name, c.value, c.options)
   })
+  return redirectResponse
 }
 
-const EMAIL_OTP_TYPES: EmailOtpType[] = [
+function authFailedRedirect(origin: string) {
+  return NextResponse.redirect(`${origin}/reset-password?error=expired`)
+}
+
+const EMAIL_OTP_TYPES: readonly EmailOtpType[] = [
   'signup',
   'invite',
   'magiclink',
   'recovery',
   'email_change',
   'email',
-]
+] as const
 
-function resolveOtpType(typeParam: string | null): EmailOtpType {
-  if (typeParam && EMAIL_OTP_TYPES.includes(typeParam as EmailOtpType)) {
-    return typeParam as EmailOtpType
-  }
-  return 'recovery'
+function parseEmailOtpType(raw: string | null): EmailOtpType | null {
+  if (!raw) return null
+  return EMAIL_OTP_TYPES.includes(raw as EmailOtpType) ? (raw as EmailOtpType) : null
 }
 
 export async function GET(request: NextRequest) {
   const url = new URL(request.url)
-  const code = url.searchParams.get('code')
-  const token = url.searchParams.get('token')
-  const nextRaw = url.searchParams.get('next')
-  const next = nextRaw ?? '/'
-  const type = url.searchParams.get('type')
   const origin = url.origin
 
-  const isPasswordRecoveryFromQuery =
-    type === 'recovery' ||
-    next === '/reset-password' ||
-    next.endsWith('/reset-password') ||
-    (!!token && !code && (type === 'recovery' || type === null))
-
-  if (!code && !token) {
-    console.error('[auth/callback] code 또는 token 없음 — Redirect URLs·이메일 링크 형식 확인')
-    return NextResponse.redirect(recoveryTokenErrorPath(origin))
-  }
+  const code = url.searchParams.get('code')
+  const tokenHash =
+    url.searchParams.get('token_hash') ?? url.searchParams.get('token')
+  const typeParam = url.searchParams.get('type')
+  const nextRaw = url.searchParams.get('next')
+  const next = nextRaw ?? '/'
 
   const pendingCookies: { name: string; value: string; options: CookieOptions }[] = []
   let response = NextResponse.next({ request })
@@ -107,41 +74,45 @@ export async function GET(request: NextRequest) {
     }
   )
 
-  let error: { message: string } | null = null
-
-  if (code) {
-    const { error: exErr } = await supabase.auth.exchangeCodeForSession(code)
-    error = exErr
-  } else if (token) {
-    const otpType = resolveOtpType(type)
-    const { error: otpErr } = await supabase.auth.verifyOtp({
-      token_hash: token,
-      type: otpType,
+  // --- 1) token_hash + type (이메일 링크 / PKCE 토큰 검증) ---
+  if (tokenHash) {
+    const type = parseEmailOtpType(typeParam) ?? 'recovery'
+    const { error } = await supabase.auth.verifyOtp({
+      token_hash: tokenHash,
+      type,
     })
-    error = otpErr
-  }
 
-  if (error) {
-    console.error('Auth Callback Error:', error.message)
-    return NextResponse.redirect(recoveryTokenErrorPath(origin))
-  }
-
-  let isPasswordRecovery = isPasswordRecoveryFromQuery
-  if (!isPasswordRecovery) {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (session?.access_token && isRecoveryFromAccessToken(session.access_token)) {
-      isPasswordRecovery = true
+    if (error) {
+      console.error('[auth/callback] verifyOtp:', error.message)
+      return authFailedRedirect(origin)
     }
+
+    const targetPath = type === 'recovery' ? '/reset-password' : next.startsWith('/') ? next : `/${next}`
+    return redirectWithCookies(origin, targetPath, pendingCookies)
   }
 
-  const targetPath = isPasswordRecovery
-    ? '/reset-password'
-    : next.startsWith('/') ? next : `/${next}`
+  // --- 2) code (PKCE authorization code 교환) ---
+  if (code) {
+    const { error } = await supabase.auth.exchangeCodeForSession(code)
 
-  const redirectResponse = NextResponse.redirect(`${origin}${targetPath}`)
-  pendingCookies.forEach((c) => {
-    redirectResponse.cookies.set(c.name, c.value, c.options)
-  })
+    if (error) {
+      console.error('[auth/callback] exchangeCodeForSession:', error.message)
+      return authFailedRedirect(origin)
+    }
 
-  return redirectResponse
+    const otpType = parseEmailOtpType(typeParam)
+    const toReset =
+      otpType === 'recovery' ||
+      next === '/reset-password' ||
+      next.endsWith('/reset-password')
+
+    const targetPath = toReset
+      ? '/reset-password'
+      : next.startsWith('/') ? next : `/${next}`
+
+    return redirectWithCookies(origin, targetPath, pendingCookies)
+  }
+
+  console.error('[auth/callback] token_hash 또는 code 가 없습니다')
+  return authFailedRedirect(origin)
 }
