@@ -1,6 +1,11 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
+/** code 없음·교환 실패 시 — 비밀번호 재설정 링크 오류는 /login 이 아니라 여기서 안내 */
+function recoveryTokenErrorPath(origin: string) {
+  return `${origin}/reset-password?error=expired`
+}
+
 /**
  * OAuth / 이메일 링크(PKCE code) 공통 콜백.
  * setAll에서 넘어온 name/value/options를 리다이렉트 응답에 그대로 복사해야
@@ -56,7 +61,7 @@ export async function GET(request: NextRequest) {
 
   if (!code) {
     console.error('[auth/callback] ?code= 없음 — Redirect URLs·redirectTo 불일치 가능')
-    return NextResponse.redirect(`${origin}/reset-password?error=expired`)
+    return NextResponse.redirect(recoveryTokenErrorPath(origin))
   }
 
   const pendingCookies: { name: string; value: string; options: CookieOptions }[] = []
@@ -84,7 +89,7 @@ export async function GET(request: NextRequest) {
 
   if (error) {
     console.error('Auth Callback Error:', error.message)
-    return NextResponse.redirect(`${origin}/reset-password?error=expired`)
+    return NextResponse.redirect(recoveryTokenErrorPath(origin))
   }
 
   let isPasswordRecovery = isPasswordRecoveryFromQuery
