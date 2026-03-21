@@ -16,17 +16,7 @@ function ResetPasswordContent() {
   const callbackExpiredRef = useRef(false)
 
   useEffect(() => {
-    if (searchParams.get('error') === 'expired') {
-      callbackExpiredRef.current = true
-      setError('링크가 만료됐어요. 다시 시도해주세요')
-      setLoading(false)
-      if (typeof window !== 'undefined') {
-        const u = new URL(window.location.href)
-        u.searchParams.delete('error')
-        window.history.replaceState(null, '', `${u.pathname}${u.search}${u.hash}`)
-      }
-      return
-    }
+    const expiredParam = searchParams.get('error') === 'expired'
 
     if (callbackExpiredRef.current) {
       return
@@ -56,10 +46,38 @@ function ResetPasswordContent() {
     }
 
     const ensureRecoverySession = async () => {
+      // 서버 콜백이 HttpOnly 쿠키에 세션을 넣은 직후일 수 있음 — createBrowserClient가 쿠키 저장소 사용
       let { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        await supabase.auth.refreshSession().catch(() => {})
+        session = (await supabase.auth.getSession()).data.session
+      }
       if (session) {
+        if (expiredParam && typeof window !== 'undefined') {
+          const u = new URL(window.location.href)
+          u.searchParams.delete('error')
+          window.history.replaceState(null, '', `${u.pathname}${u.search}${u.hash}`)
+        }
         setLoading(false)
         return true
+      }
+
+      // error=expired 인데 위에서 세션을 못 찾은 경우에만 만료 안내 (콜백이 잘못 붙인 쿼리일 수 있어 한 번 더 대기)
+      if (expiredParam) {
+        const recovered = await waitForSession(2200)
+        if (recovered && !cancelled) {
+          if (typeof window !== 'undefined') {
+            const u = new URL(window.location.href)
+            u.searchParams.delete('error')
+            window.history.replaceState(null, '', `${u.pathname}${u.search}${u.hash}`)
+          }
+          setLoading(false)
+          return true
+        }
+        callbackExpiredRef.current = true
+        setError('링크가 만료됐어요. 다시 시도해주세요')
+        setLoading(false)
+        return false
       }
 
       const code = searchParams.get('code')
