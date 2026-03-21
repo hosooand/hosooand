@@ -18,11 +18,11 @@ export default function ForgotPasswordPage() {
     setLoading(true)
     setError(null)
     try {
-      // PKCE code는 /auth/callback에서 한 번만 교환 (reset-password에서 이중 호출·Strict Mode 이슈 방지)
-      // Supabase Dashboard → Redirect URLs에 다음이 포함되어야 함:
-      //   https://hosooand.vercel.app/auth/callback
-      //   https://hosooand.vercel.app/reset-password (구 링크·직접 리다이렉트용)
-      const callbackUrl = `${window.location.origin}/auth/callback?next=${encodeURIComponent('/reset-password')}&type=recovery`
+      // 프로덕션 콜백 URL과 Supabase Redirect URLs를 정확히 일치시켜야 ?code= 가 콜백으로 옵니다.
+      const callbackBase =
+        process.env.NEXT_PUBLIC_AUTH_CALLBACK_URL ??
+        'https://hosooand.vercel.app/auth/callback'
+      const callbackUrl = `${callbackBase}?next=${encodeURIComponent('/reset-password')}&type=recovery`
       const { error: err } = await supabase.auth.resetPasswordForEmail(email.trim(), {
         redirectTo: callbackUrl,
       })
