@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
 
   if (!code) {
     console.error('[auth/callback] ?code= 없음 — Redirect URLs·redirectTo 불일치 가능')
-    return NextResponse.redirect(`${origin}/login?error=invalid_token_or_expired`)
+    return NextResponse.redirect(`${origin}/reset-password?error=expired`)
   }
 
   const pendingCookies: { name: string; value: string; options: CookieOptions }[] = []
@@ -84,7 +84,7 @@ export async function GET(request: NextRequest) {
 
   if (error) {
     console.error('Auth Callback Error:', error.message)
-    return NextResponse.redirect(`${origin}/login?error=invalid_token_or_expired`)
+    return NextResponse.redirect(`${origin}/reset-password?error=expired`)
   }
 
   let isPasswordRecovery = isPasswordRecoveryFromQuery

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, Suspense } from 'react'
+import { useEffect, useState, useRef, Suspense } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 
@@ -13,8 +13,25 @@ function ResetPasswordContent() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const supabase = createClient()
+  const callbackExpiredRef = useRef(false)
 
   useEffect(() => {
+    if (searchParams.get('error') === 'expired') {
+      callbackExpiredRef.current = true
+      setError('링크가 만료됐어요. 다시 시도해주세요')
+      setLoading(false)
+      if (typeof window !== 'undefined') {
+        const u = new URL(window.location.href)
+        u.searchParams.delete('error')
+        window.history.replaceState(null, '', `${u.pathname}${u.search}${u.hash}`)
+      }
+      return
+    }
+
+    if (callbackExpiredRef.current) {
+      return
+    }
+
     let cancelled = false
 
     const stripUrlCode = () => {
