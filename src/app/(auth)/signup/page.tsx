@@ -5,8 +5,6 @@ import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
-type Role = 'member' | 'staff'
-
 function getStrength(pw: string) {
   if (!pw) return { score: 0, label: '', color: '' }
   let s = 0
@@ -39,7 +37,6 @@ export default function SignupPage() {
   const supabase = createClient()
   const router   = useRouter()
 
-  const [role, setRole]       = useState<Role>('member')
   const [name, setName]       = useState('')
   const [email, setEmail]     = useState('')
   const [pw, setPw]           = useState('')
@@ -85,7 +82,7 @@ export default function SignupPage() {
       email,
       password: pw,
       options: {
-        data: { name, role },
+        data: { name, role: 'member' },
         emailRedirectTo: `${window.location.origin}/auth/callback`,
       },
     })
@@ -97,13 +94,11 @@ export default function SignupPage() {
     }
 
     if (data.user) {
-      const row: { id: string; name: string; role: Role; is_approved?: boolean } = {
+      await supabase.from('profiles').insert({
         id: data.user.id,
         name,
-        role,
-      }
-      if (role === 'staff') row.is_approved = false
-      await supabase.from('profiles').insert(row)
+        role: 'member',
+      })
     }
 
     // 가입 직후 남은 세션/쿠키로 인해 바로 로그인 시 오인증이 나는 경우 방지
@@ -138,22 +133,9 @@ export default function SignupPage() {
 
       <form onSubmit={handleSignup} noValidate>
 
-        {/* 가입 유형 */}
-        <div className="mb-4">
-          <label className="block text-[13px] font-medium text-gray-600 mb-2">가입 유형</label>
-          <div className="flex gap-2.5">
-            {(['member', 'staff'] as Role[]).map(r => (
-              <button key={r} type="button" onClick={() => setRole(r)}
-                className={`flex-1 py-3.5 rounded-[10px] border-[1.5px] text-center transition-all
-                  ${role === r ? 'border-pink-400 bg-pink-50' : 'border-gray-200 bg-white hover:border-pink-200'}`}>
-                <div className="text-xl mb-1">{r === 'member' ? '🙋‍♀️' : '👩‍⚕️'}</div>
-                <div className={`text-[13px] font-medium ${role === r ? 'text-pink-600' : 'text-gray-500'}`}>
-                  {r === 'member' ? '일반 회원' : '관리 직원'}
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
+        <p className="mb-4 text-[13px] text-gray-500 leading-relaxed">
+          직원 계정은 센터 관리자가 <span className="font-medium text-gray-700">관리자 메뉴</span>에서 등록합니다.
+        </p>
 
         {/* 이름 */}
         <div className="mb-4">

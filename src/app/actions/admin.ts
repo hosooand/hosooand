@@ -75,3 +75,65 @@ export async function createMember({
     return { success: false, error: message }
   }
 }
+
+interface CreateStaffByAdminParams {
+  name:     string
+  email:    string
+  password: string
+}
+
+/** 관리자 전용: 신규 직원 등록 (role=staff, is_approved=false) */
+export async function createStaffByAdmin({
+  name,
+  email,
+  password,
+}: CreateStaffByAdminParams): Promise<CreateMemberResult> {
+  try {
+    const supabase = await createServerSupabaseClient()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) {
+      return { success: false, error: '로그인이 필요합니다' }
+    }
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    if (profile?.role !== 'admin') {
+      return { success: false, error: '관리자만 직원을 등록할 수 있습니다' }
+    }
+
+    const adminClient = createAdminClient()
+    const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
+      email:         email.trim(),
+      password,
+      email_confirm: true,
+    })
+
+    if (createError || !newUser.user) {
+      return { success: false, error: createError?.message ?? '유저 생성 실패' }
+    }
+
+    const { error: profileError } = await adminClient
+      .from('profiles')
+      .insert({
+        id:           newUser.user.id,
+        name:         name.trim(),
+        role:         'staff',
+        is_approved:  false,
+      })
+
+    if (profileError) {
+      await adminClient.auth.admin.deleteUser(newUser.user.id)
+      return { success: false, error: profileError.message }
+    }
+
+    return { success: true }
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : '알 수 없는 오류'
+    return { success: false, error: message }
+  }
+}
