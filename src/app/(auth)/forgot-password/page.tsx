@@ -18,10 +18,9 @@ export default function ForgotPasswordPage() {
     setLoading(true)
     setError(null)
     try {
-      // Supabase가 redirectTo 끝에 ?code= 를 붙입니다. Redirect URLs와 동일한 문자열이어야 합니다.
-      // 복구 플로우는 /auth/callback 에서 세션 JWT(amr)로도 감지합니다.
-      const redirectTo =
-        process.env.NEXT_PUBLIC_AUTH_CALLBACK_URL ?? 'https://hosooand.vercel.app/auth/callback'
+      // PKCE code_verifier는 요청한 브라우저 쿠키에만 있으므로, 링크는 같은 호스트의 /reset-password 로 보냅니다.
+      // Supabase Redirect URLs에 {현재 사이트 origin}/reset-password 를 등록하세요.
+      const redirectTo = `${window.location.origin}/reset-password`
       const { error: err } = await supabase.auth.resetPasswordForEmail(email.trim(), {
         redirectTo,
       })

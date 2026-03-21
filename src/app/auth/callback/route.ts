@@ -23,24 +23,26 @@ function decodeJwtPayload(accessToken: string): Record<string, unknown> | null {
   }
 }
 
-/** 비밀번호 재설정 이메일: redirectTo에 쿼리 없이 /auth/callback 만 쓸 때 type=recovery 가 없을 수 있음 → JWT amr로 보조 판별 */
+/** 비밀번호 재설정 세션: Supabase가 amr에 otp/password/recovery 등을 넣는 경우가 있음 */
 function isRecoveryFromAccessToken(accessToken: string): boolean {
   const payload = decodeJwtPayload(accessToken)
   if (!payload) return false
   const amr = payload.amr
   if (!Array.isArray(amr)) return false
   return amr.some((entry: unknown) => {
+    if (entry === 'otp' || entry === 'recovery' || entry === 'password') return true
     if (typeof entry === 'string') {
       try {
         const o = JSON.parse(entry) as { method?: string }
-        return o.method === 'otp' || o.method === 'recovery'
+        const m = o.method
+        return m === 'otp' || m === 'recovery' || m === 'password'
       } catch {
         return false
       }
     }
     if (typeof entry === 'object' && entry !== null && 'method' in entry) {
       const m = (entry as { method: string }).method
-      return m === 'otp' || m === 'recovery'
+      return m === 'otp' || m === 'recovery' || m === 'password'
     }
     return false
   })

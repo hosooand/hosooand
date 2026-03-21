@@ -44,8 +44,19 @@ function ResetPasswordContent() {
       window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`)
     }
 
+    /** 콜백 리다이렉트 직후·React Strict Mode에서 쿠키/세션이 한 박자 늦을 때 */
+    const waitForSession = async (maxMs: number) => {
+      const start = Date.now()
+      while (Date.now() - start < maxMs) {
+        const { data: { session: s } } = await supabase.auth.getSession()
+        if (s) return s
+        await new Promise(r => setTimeout(r, 80))
+      }
+      return null
+    }
+
     const ensureRecoverySession = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
+      let { data: { session } } = await supabase.auth.getSession()
       if (session) {
         setLoading(false)
         return true
@@ -54,6 +65,16 @@ function ResetPasswordContent() {
       const code = searchParams.get('code')
       const tokenHash = searchParams.get('token_hash')
       const type = searchParams.get('type')
+      const hasHash = typeof window !== 'undefined' && !!window.location.hash?.replace(/^#/, '')
+
+      // /auth/callback에서 세션만 만들고 code 없이 온 경우
+      if (!code && !tokenHash && !hasHash) {
+        session = await waitForSession(2500)
+        if (session) {
+          if (!cancelled) setLoading(false)
+          return true
+        }
+      }
 
       if (tokenHash && type === 'recovery') {
         const { error: otpErr } = await supabase.auth.verifyOtp({
@@ -75,19 +96,38 @@ function ResetPasswordContent() {
       if (code) {
         const dedupeKey = `sb_recovery_pkce_${code}`
         if (typeof window !== 'undefined' && sessionStorage.getItem(dedupeKey)) {
+          const waited = await waitForSession(1200)
+          if (waited && !cancelled) {
+            setLoading(false)
+            return true
+          }
           const { data: { session: s2 } } = await supabase.auth.getSession()
-          if (!s2 && !cancelled) {
+          if (s2 && !cancelled) {
+            setLoading(false)
+            return true
+          }
+          if (!cancelled) {
             setError('링크가 만료되었거나 잘못되었습니다. 다시 시도해 주세요.')
             setLoading(false)
-          } else if (!cancelled) setLoading(false)
-          return !!s2
+          }
+          return false
         }
         if (typeof window !== 'undefined') sessionStorage.setItem(dedupeKey, '1')
 
         const { error: exErr } = await supabase.auth.exchangeCodeForSession(code)
-        const { data: { session: after } } = await supabase.auth.getSession()
+        let { data: { session: after } } = await supabase.auth.getSession()
 
         if (exErr && !after) {
+          if (!cancelled) {
+            setError('링크가 만료되었거나 잘못되었습니다. 다시 시도해 주세요.')
+            setLoading(false)
+          }
+          return false
+        }
+        if (!after) {
+          after = await waitForSession(1200)
+        }
+        if (!after) {
           if (!cancelled) {
             setError('링크가 만료되었거나 잘못되었습니다. 다시 시도해 주세요.')
             setLoading(false)
@@ -119,6 +159,12 @@ function ResetPasswordContent() {
           if (!cancelled) setLoading(false)
           return true
         }
+      }
+
+      const lastChance = await waitForSession(600)
+      if (lastChance && !cancelled) {
+        setLoading(false)
+        return true
       }
 
       if (!cancelled) {
