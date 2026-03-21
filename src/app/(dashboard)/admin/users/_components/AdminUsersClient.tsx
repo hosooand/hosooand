@@ -2,8 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
-import { createStaffByAdmin } from '@/app/actions/admin'
+import { createStaffByAdmin, setStaffApprovalByAdmin } from '@/app/actions/admin'
 import type { PendingUser } from '../page'
 import { CheckCircle2, Users, Loader2, UserPlus, UserMinus } from 'lucide-react'
 
@@ -14,7 +13,6 @@ interface Props {
 
 export default function AdminUsersClient({ initialPending, initialApproved }: Props) {
   const router = useRouter()
-  const supabase = createClient()
   const [pendingUsers, setPendingUsers] = useState<PendingUser[]>(initialPending)
   const [approvedUsers, setApprovedUsers] = useState<PendingUser[]>(initialApproved)
   const [approving, setApproving] = useState<string | null>(null)
@@ -39,12 +37,10 @@ export default function AdminUsersClient({ initialPending, initialApproved }: Pr
   async function handleApprove(userId: string) {
     setApproving(userId)
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ is_approved: true })
-        .eq('id', userId)
-
-      if (error) throw error
+      const res = await setStaffApprovalByAdmin(userId, true)
+      if (!res.success) {
+        throw new Error(res.error ?? '승인 요청 실패')
+      }
 
       setApprovedAnim(prev => [...prev, userId])
       setTimeout(() => {
@@ -57,7 +53,8 @@ export default function AdminUsersClient({ initialPending, initialApproved }: Pr
       }, 800)
     } catch (e) {
       console.error('승인 실패:', e)
-      alert('승인에 실패했어요. 다시 시도해주세요.')
+      const msg = e instanceof Error ? e.message : '승인에 실패했어요. 다시 시도해주세요.'
+      alert(msg)
     } finally {
       setApproving(null)
     }
@@ -66,19 +63,18 @@ export default function AdminUsersClient({ initialPending, initialApproved }: Pr
   async function handleRevoke(user: PendingUser) {
     setRevoking(user.id)
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ is_approved: false })
-        .eq('id', user.id)
-
-      if (error) throw error
+      const res = await setStaffApprovalByAdmin(user.id, false)
+      if (!res.success) {
+        throw new Error(res.error ?? '권한 박탈 요청 실패')
+      }
 
       setApprovedUsers(prev => prev.filter(u => u.id !== user.id))
       setPendingUsers(prev => [user, ...prev])
       router.refresh()
     } catch (e) {
       console.error('권한 박탈 실패:', e)
-      alert('권한 박탈에 실패했어요. 다시 시도해주세요.')
+      const msg = e instanceof Error ? e.message : '권한 박탈에 실패했어요. 다시 시도해주세요.'
+      alert(msg)
     } finally {
       setRevoking(null)
     }

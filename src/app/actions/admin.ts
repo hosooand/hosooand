@@ -137,3 +137,49 @@ export async function createStaffByAdmin({
     return { success: false, error: message }
   }
 }
+
+/** 관리자 전용: staff 프로필의 is_approved 변경 (service role — RLS 우회) */
+export async function setStaffApprovalByAdmin(
+  userId: string,
+  isApproved: boolean,
+): Promise<CreateMemberResult> {
+  try {
+    const supabase = await createServerSupabaseClient()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) {
+      return { success: false, error: '로그인이 필요합니다' }
+    }
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    if (profile?.role !== 'admin') {
+      return { success: false, error: '관리자만 직원 승인 상태를 변경할 수 있습니다' }
+    }
+
+    const adminClient = createAdminClient()
+    const { data: updated, error } = await adminClient
+      .from('profiles')
+      .update({ is_approved: isApproved })
+      .eq('id', userId)
+      .eq('role', 'staff')
+      .select('id')
+      .maybeSingle()
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+    if (!updated) {
+      return { success: false, error: '해당 직원 프로필을 찾을 수 없습니다' }
+    }
+
+    return { success: true }
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : '알 수 없는 오류'
+    return { success: false, error: message }
+  }
+}
