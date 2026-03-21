@@ -18,14 +18,12 @@ export default function ForgotPasswordPage() {
     setLoading(true)
     setError(null)
     try {
-      // Supabase는 redirectTo 끝에 ?code= 를 붙입니다. 복구 여부는 type=recovery 로 구분합니다.
-      // Redirect URLs에 https://hosooand.vercel.app/auth/callback 이 있으면
-      // 동일 호스트 경로에 쿼리만 붙인 URL도 허용되는 경우가 많습니다(대시보드에서 한 번 확인).
-      const callbackBase =
+      // Supabase가 redirectTo 끝에 ?code= 를 붙입니다. Redirect URLs와 동일한 문자열이어야 합니다.
+      // 복구 플로우는 /auth/callback 에서 세션 JWT(amr)로도 감지합니다.
+      const redirectTo =
         process.env.NEXT_PUBLIC_AUTH_CALLBACK_URL ?? 'https://hosooand.vercel.app/auth/callback'
-      const callbackUrl = `${callbackBase}?next=${encodeURIComponent('/reset-password')}&type=recovery`
       const { error: err } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: callbackUrl,
+        redirectTo,
       })
       if (err) throw err
       setSent(true)
