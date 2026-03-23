@@ -175,27 +175,27 @@ export async function generateMemberExcel(
     font: { bold: true, size: 16, color: { argb: 'FF9B1942' } },
     alignment: { vertical: 'middle', horizontal: 'center' },
   }
-  ws.getRow(1).height = 36
+  ws.getRow(1).height = 40
 
   // 고객 정보
   ws.mergeCells('A2:B2'); ws.getCell('A2').value = `고객명: ${member.name}`
   ws.mergeCells('C2:D2'); ws.getCell('C2').value = `최근내원일: ${new Date().toLocaleDateString('ko-KR')}`
   ws.mergeCells('E2:G2'); ws.getCell('E2').value = `다음 예약일:`
-  ws.getRow(2).height = 22
+  ws.getRow(2).height = 24
   ws.mergeCells('A3:B3'); ws.getCell('A3').value = `담당실장: ${member.staff_name ?? ''}`
   ws.mergeCells('C3:D3'); ws.getCell('C3').value = `기간: ${rangeLabel}`
   ws.mergeCells('E3:G3'); ws.getCell('E3').value = `식단관리시간:`
-  ws.getRow(3).height = 22
+  ws.getRow(3).height = 24
   ;[2, 3].forEach(r => ws.getRow(r).eachCell(c => {
     c.font = { size: 11 }
     c.alignment = { vertical: 'middle' }
   }))
 
-  ws.addRow([]) // 빈 행
+  ws.addRow([]).height = 24 // 빈 행
 
   // 컬럼 헤더
   const hRow = ws.addRow(['등록일', '아침', '점심', '저녁', '간식', '수분', '총칼로리'])
-  hRow.height = 28
+  hRow.height = 30
   const hColors = ['FFE8F5E9', 'FFFFF8E1', 'FFFFF3E0', 'FFE8EAF6', 'FFFCE4EC', 'FFE3F2FD', 'FFF3E5F5']
   hRow.eachCell((cell, col) => { cell.style = headerStyle(hColors[col - 1] ?? 'FFF5F5F5') })
 
@@ -205,10 +205,7 @@ export async function generateMemberExcel(
     const entries  = parseMealEntries((log as DailyLog & { meal_entries?: unknown }).meal_entries)
     const hasImage = MEAL_TYPES.some(mt => !!getMealEntry(entries, mt)?.image_url)
 
-    // 이미지 높이: 텍스트 행 높이 80 / 이미지 행 높이 160
-    const ROW_H    = hasImage ? 160 : 80
-    // 이미지가 차지할 높이 비율 (전체 행에서 상단 텍스트/하단 텍스트 제외)
-    const IMG_H_PT = ROW_H - 30 // 상단 시간(15pt) + 하단 칼로리(15pt) 제외
+    const ROW_H = hasImage ? 180 : 100
 
     const mealCals = MEAL_TYPES.map(mt => {
       const e = getMealEntry(entries, mt)
@@ -300,10 +297,10 @@ export async function generateMemberExcel(
   }
 
   // 합계 행
-  ws.addRow([])
+  ws.addRow([]).height = 24
   const sumRowNum = ws.rowCount + 1
   const sumRow    = ws.addRow(['합계', '', '', '', '', '', `총 ${Math.round(totalCalSum)}kcal`])
-  sumRow.height   = 28
+  sumRow.height   = 30
   ws.mergeCells(`A${sumRowNum}:F${sumRowNum}`)
   sumRow.eachCell(cell => {
     cell.style = {
