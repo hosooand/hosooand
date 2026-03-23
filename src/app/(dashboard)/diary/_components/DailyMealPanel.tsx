@@ -8,6 +8,9 @@ import { Camera, Loader2, Sparkles, RefreshCw, X, ChevronDown, ChevronUp, CheckC
 // ── 타입 ──────────────────────────────────────────────────────
 export type MealType = '아침' | '점심' | '저녁' | '간식'
 
+/** AI 기준 대비 실제 섭취 비율 (meal_entries에 저장) */
+export type IntakeRatio = 0.25 | 0.5 | 0.75 | 1
+
 export interface MealAnalysis {
   calories:    number
   carbs:       number
@@ -20,12 +23,27 @@ export interface MealAnalysis {
 }
 
 export interface MealPanelEntry {
-  meal_type:  MealType
-  time:       string | null   // ← 추가: "HH:MM" 형식
-  image_url:  string | null
-  content:    string | null
-  calories:   number | null
-  analysis:   MealAnalysis | null
+  meal_type:    MealType
+  time:         string | null   // ← 추가: "HH:MM" 형식
+  image_url:    string | null
+  content:      string | null
+  calories:     number | null
+  analysis:     MealAnalysis | null
+  /** 없으면 1(전부) — AI 분석 칼로리 기준 */
+  intake_ratio?: IntakeRatio
+}
+
+const INTAKE_OPTIONS: { ratio: IntakeRatio; label: string }[] = [
+  { ratio: 0.25, label: '1/4 먹음' },
+  { ratio: 0.5,  label: '1/2 먹음' },
+  { ratio: 0.75, label: '3/4 먹음' },
+  { ratio: 1,    label: '전부 먹음' },
+]
+
+function getIntakeRatio(entry: MealPanelEntry): number {
+  const r = entry.intake_ratio
+  if (r === 0.25 || r === 0.5 || r === 0.75 || r === 1) return r
+  return 1
 }
 
 // ── 상수 ──────────────────────────────────────────────────────
@@ -98,7 +116,14 @@ function MealCard({ userId, date, mealType, entry, onChange }: MealCardProps) {
       })
       if (!res.ok) throw new Error('이미지 분석 실패')
       const analysis: MealAnalysis = await res.json()
-      onChange({ ...entry, meal_type: mealType, image_url: url, calories: analysis.calories, analysis })
+      onChange({
+        ...entry,
+        meal_type:    mealType,
+        image_url:    url,
+        calories:     Math.round(analysis.calories),
+        analysis,
+        intake_ratio: 1,
+      })
       flashSaved()
     } catch (e) {
       setError(e instanceof Error ? e.message : '업로드 실패')
@@ -120,7 +145,14 @@ function MealCard({ userId, date, mealType, entry, onChange }: MealCardProps) {
       })
       if (!res.ok) throw new Error('텍스트 분석 실패')
       const analysis: MealAnalysis = await res.json()
-      onChange({ ...entry, meal_type: mealType, content: content.trim(), calories: analysis.calories, analysis })
+      onChange({
+        ...entry,
+        meal_type:    mealType,
+        content:      content.trim(),
+        calories:     Math.round(analysis.calories),
+        analysis,
+        intake_ratio: 1,
+      })
       flashSaved()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'AI 분석 실패')
@@ -139,6 +171,15 @@ function MealCard({ userId, date, mealType, entry, onChange }: MealCardProps) {
     onChange({ ...entry, time })
   }
 
+  function handleIntakeRatio(ratio: IntakeRatio) {
+    if (!entry.analysis) return
+    onChange({
+      ...entry,
+      intake_ratio: ratio,
+      calories:     Math.round(entry.analysis.calories * ratio),
+    })
+  }
+
   function flashSaved() {
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
@@ -155,7 +196,7 @@ function MealCard({ userId, date, mealType, entry, onChange }: MealCardProps) {
           </span>
           {entry.analysis && (
             <span className="text-[12px] font-bold text-pink-600 bg-pink-100 px-2 py-0.5 rounded-full">
-              {Math.round(entry.analysis.calories)} kcal
+              {Math.round(entry.analysis.calories * getIntakeRatio(entry))} kcal
             </span>
           )}
           {saved && <CheckCircle2 size={15} className="text-emerald-500" />}
@@ -288,35 +329,62 @@ function MealCard({ userId, date, mealType, entry, onChange }: MealCardProps) {
           )}
 
           {/* 분석 결과 */}
-          {entry.analysis && (
-            <div className="bg-white rounded-xl border border-pink-100 p-3">
-              <div className="flex items-center gap-3">
-                <div className="text-center">
-                  <p className="text-[26px] font-bold text-pink-600 leading-none tabular-nums">
-                    {Math.round(entry.analysis.calories)}
-                  </p>
-                  <p className="text-[10px] text-pink-400 mt-0.5">kcal</p>
+          {entry.analysis && (() => {
+            const r = getIntakeRatio(entry)
+            return (
+              <div className="bg-white rounded-xl border border-pink-100 p-3">
+                <div className="flex items-center gap-3">
+                  <div className="text-center">
+                    <p className="text-[26px] font-bold text-pink-600 leading-none tabular-nums">
+                      {Math.round(entry.analysis.calories * r)}
+                    </p>
+                    <p className="text-[10px] text-pink-400 mt-0.5">kcal</p>
+                  </div>
+                  <div className="flex-1 grid grid-cols-3 gap-1 text-center">
+                    {([
+                      { label: '탄수화물', value: entry.analysis.carbs * r   },
+                      { label: '단백질',   value: entry.analysis.protein * r },
+                      { label: '지방',     value: entry.analysis.fat * r     },
+                    ] as const).map(n => (
+                      <div key={n.label}>
+                        <p className="text-[13px] font-bold text-gray-700">{Math.round(n.value)}g</p>
+                        <p className="text-[10px] text-gray-400">{n.label}</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div className="flex-1 grid grid-cols-3 gap-1 text-center">
-                  {([
-                    { label: '탄수화물', value: entry.analysis.carbs   },
-                    { label: '단백질',   value: entry.analysis.protein },
-                    { label: '지방',     value: entry.analysis.fat     },
-                  ] as const).map(n => (
-                    <div key={n.label}>
-                      <p className="text-[13px] font-bold text-gray-700">{Math.round(n.value)}g</p>
-                      <p className="text-[10px] text-gray-400">{n.label}</p>
-                    </div>
-                  ))}
+                {entry.analysis.feedback && (
+                  <p className="text-[11px] text-gray-500 mt-2 pt-2 border-t border-pink-100 leading-relaxed">
+                    {entry.analysis.feedback}
+                  </p>
+                )}
+                <div className="mt-3 pt-3 border-t border-pink-100 space-y-2">
+                  <p className="text-[11px] font-semibold text-gray-600">섭취량</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {INTAKE_OPTIONS.map(opt => {
+                      const selected = getIntakeRatio(entry) === opt.ratio
+                      return (
+                        <button
+                          key={opt.ratio}
+                          type="button"
+                          onClick={() => handleIntakeRatio(opt.ratio)}
+                          disabled={isLoading}
+                          className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all
+                            border disabled:opacity-50 disabled:cursor-not-allowed
+                            ${selected
+                              ? 'border-pink-400 bg-pink-50 text-pink-700 shadow-sm'
+                              : 'border-gray-200 bg-white text-gray-600 hover:border-pink-200 hover:bg-pink-50/50'
+                            }`}
+                        >
+                          {opt.label}
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
               </div>
-              {entry.analysis.feedback && (
-                <p className="text-[11px] text-gray-500 mt-2 pt-2 border-t border-pink-100 leading-relaxed">
-                  {entry.analysis.feedback}
-                </p>
-              )}
-            </div>
-          )}
+            )
+          })()}
         </div>
       )}
     </div>

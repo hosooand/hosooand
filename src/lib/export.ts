@@ -10,11 +10,12 @@ interface Member {
 }
 
 interface MealPanelEntry {
-  meal_type:  '아침' | '점심' | '저녁' | '간식'
-  time:       string | null
-  image_url:  string | null
-  content:    string | null
-  calories:   number | null
+  meal_type:    '아침' | '점심' | '저녁' | '간식'
+  time:         string | null
+  image_url:    string | null
+  content:      string | null
+  calories:     number | null
+  intake_ratio?: number
   analysis: {
     calories: number
     foods:    { name: string; amount: string; calories: number }[]
@@ -67,19 +68,30 @@ function getMealEntry(entries: MealPanelEntry[], mealType: MealType): MealPanelE
 }
 
 // 식단 텍스트 생성 (시간 + 음식 + 칼로리)
+function mealIntakeRatio(entry: MealPanelEntry): number {
+  const r = entry.intake_ratio
+  if (r === 0.25 || r === 0.5 || r === 0.75 || r === 1) return r
+  return 1
+}
+
 function getMealText(entry: MealPanelEntry | null, mealType: MealType): string {
   if (!entry) return '-'
+  const ratio = mealIntakeRatio(entry)
   const lines: string[] = []
   const time = entry.time ?? MEAL_DEFAULTS[mealType]
   lines.push(`⏰ ${time}`)
+  if (ratio < 1) {
+    const label = ratio === 0.25 ? '1/4' : ratio === 0.5 ? '1/2' : ratio === 0.75 ? '3/4' : ''
+    if (label) lines.push(`섭취: ${label} 먹음`)
+  }
   if (entry.analysis?.foods && entry.analysis.foods.length > 0) {
     entry.analysis.foods.forEach(f => {
-      lines.push(`${f.name} ${f.amount} (${Math.round(f.calories)}kcal)`)
+      lines.push(`${f.name} ${f.amount} (${Math.round(f.calories * ratio)}kcal)`)
     })
   } else if (entry.content) {
     lines.push(entry.content)
   }
-  const cal = entry.calories ?? entry.analysis?.calories ?? 0
+  const cal = entry.calories ?? Math.round((entry.analysis?.calories ?? 0) * ratio)
   if (cal > 0) lines.push(`합계: ${Math.round(cal)}kcal`)
   return lines.join('\n')
 }

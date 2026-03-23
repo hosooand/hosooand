@@ -121,11 +121,16 @@ export default function DiaryClient({ date, initialLog, profile, userId }: Props
 
   function handleMealChange(entries: MealPanelEntry[]) {
     setMealEntries(entries)
-    const totalCals    = entries.reduce((sum, e) => sum + (e.calories         ?? 0), 0)
-    const totalCarbs   = entries.reduce((sum, e) => sum + (e.analysis?.carbs   ?? 0), 0)
-    const totalProtein = entries.reduce((sum, e) => sum + (e.analysis?.protein ?? 0), 0)
-    const totalFat     = entries.reduce((sum, e) => sum + (e.analysis?.fat     ?? 0), 0)
-    const totalFiber   = entries.reduce((sum, e) => sum + (e.analysis?.fiber   ?? 0), 0)
+    const ratio = (e: MealPanelEntry) => {
+      const r = e.intake_ratio
+      if (r === 0.25 || r === 0.5 || r === 0.75 || r === 1) return r
+      return 1
+    }
+    const totalCals    = entries.reduce((sum, e) => sum + (e.calories ?? 0), 0)
+    const totalCarbs   = entries.reduce((sum, e) => sum + Math.round((e.analysis?.carbs   ?? 0) * ratio(e)), 0)
+    const totalProtein = entries.reduce((sum, e) => sum + Math.round((e.analysis?.protein ?? 0) * ratio(e)), 0)
+    const totalFat     = entries.reduce((sum, e) => sum + Math.round((e.analysis?.fat     ?? 0) * ratio(e)), 0)
+    const totalFiber   = entries.reduce((sum, e) => sum + Math.round((e.analysis?.fiber   ?? 0) * ratio(e)), 0)
     if (totalCals > 0) {
       setValue('meal_analysis', {
         calories:    totalCals,
@@ -133,7 +138,13 @@ export default function DiaryClient({ date, initialLog, profile, userId }: Props
         protein:     totalProtein,
         fat:         totalFat,
         fiber:       totalFiber,
-        foods:       entries.flatMap(e => e.analysis?.foods ?? []),
+        foods:       entries.flatMap(e => {
+          const r = ratio(e)
+          return (e.analysis?.foods ?? []).map(f => ({
+            ...f,
+            calories: Math.round(f.calories * r),
+          }))
+        }),
         feedback:    entries.map(e => e.analysis?.feedback ?? '').filter(Boolean).join(' '),
         analyzed_at: new Date().toISOString(),
       }, { shouldDirty: true })
