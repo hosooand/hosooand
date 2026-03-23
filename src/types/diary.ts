@@ -15,6 +15,10 @@ export interface MealAnalysis {
   protein:     number
   fat:         number
   fiber:       number
+  /** 추정 나트륨 (mg) — AI 분석 시 선택 */
+  sodium_mg?:  number
+  /** 추정 당류 (g) — AI 분석 시 선택 */
+  sugar_g?:    number
   foods:       FoodItem[]
   feedback:    string
   analyzed_at: string

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
-import { Camera, Loader2, Sparkles, RefreshCw, X, ChevronDown, ChevronUp, CheckCircle2, Clock } from 'lucide-react'
+import { Camera, Loader2, Sparkles, RefreshCw, X, ChevronDown, ChevronUp, CheckCircle2, Clock, Pencil, Check } from 'lucide-react'
 
 // ── 타입 ──────────────────────────────────────────────────────
 export type MealType = '아침' | '점심' | '저녁' | '간식'
@@ -17,6 +17,8 @@ export interface MealAnalysis {
   protein:     number
   fat:         number
   fiber:       number
+  sodium_mg?:  number
+  sugar_g?:    number
   foods:       { name: string; amount: string; calories: number }[]
   feedback:    string
   analyzed_at: string
@@ -34,16 +36,22 @@ export interface MealPanelEntry {
 }
 
 const INTAKE_OPTIONS: { ratio: IntakeRatio; label: string }[] = [
-  { ratio: 0.25, label: '1/4 먹음' },
-  { ratio: 0.5,  label: '1/2 먹음' },
-  { ratio: 0.75, label: '3/4 먹음' },
-  { ratio: 1,    label: '전부 먹음' },
+  { ratio: 0.25, label: '1/4' },
+  { ratio: 0.5,  label: '1/2' },
+  { ratio: 0.75, label: '3/4' },
+  { ratio: 1,    label: '전부 (기본)' },
 ]
 
 function getIntakeRatio(entry: MealPanelEntry): number {
   const r = entry.intake_ratio
   if (r === 0.25 || r === 0.5 || r === 0.75 || r === 1) return r
   return 1
+}
+
+/** foods 합계 우선, 없으면 analysis.calories */
+function baseMealCalories(analysis: MealAnalysis): number {
+  const sum = analysis.foods?.reduce((s, f) => s + (Number(f.calories) || 0), 0) ?? 0
+  return sum > 0 ? sum : Number(analysis.calories) || 0
 }
 
 // ── 상수 ──────────────────────────────────────────────────────
@@ -81,6 +89,13 @@ function MealCard({ userId, date, mealType, entry, onChange }: MealCardProps) {
   const [expanded,  setExpanded]  = useState(true)
   const [error,     setError]     = useState<string | null>(null)
   const [saved,     setSaved]     = useState(false)
+  const [editingFoodIdx, setEditingFoodIdx] = useState<number | null>(null)
+  const [foodCalDraft, setFoodCalDraft]       = useState('')
+
+  useEffect(() => {
+    setEditingFoodIdx(null)
+    setFoodCalDraft('')
+  }, [date, mealType, entry.analysis?.analyzed_at])
 
   const isLoading  = uploading || analyzing
   const currentTime = entry.time ?? defaultTime
@@ -116,12 +131,13 @@ function MealCard({ userId, date, mealType, entry, onChange }: MealCardProps) {
       })
       if (!res.ok) throw new Error('이미지 분석 실패')
       const analysis: MealAnalysis = await res.json()
+      const base = baseMealCalories(analysis)
       onChange({
         ...entry,
         meal_type:    mealType,
         image_url:    url,
-        calories:     Math.round(analysis.calories),
-        analysis,
+        calories:     Math.round(base),
+        analysis:     { ...analysis, calories: base },
         intake_ratio: 1,
       })
       flashSaved()
@@ -145,12 +161,13 @@ function MealCard({ userId, date, mealType, entry, onChange }: MealCardProps) {
       })
       if (!res.ok) throw new Error('텍스트 분석 실패')
       const analysis: MealAnalysis = await res.json()
+      const base = baseMealCalories(analysis)
       onChange({
         ...entry,
         meal_type:    mealType,
         content:      content.trim(),
-        calories:     Math.round(analysis.calories),
-        analysis,
+        calories:     Math.round(base),
+        analysis:     { ...analysis, calories: base },
         intake_ratio: 1,
       })
       flashSaved()
@@ -162,6 +179,8 @@ function MealCard({ userId, date, mealType, entry, onChange }: MealCardProps) {
   }
 
   function handleClear() {
+    setEditingFoodIdx(null)
+    setFoodCalDraft('')
     onChange({ meal_type: mealType, time: entry.time, image_url: null, content: null, calories: null, analysis: null })
     setContent('')
     setError(null)
@@ -173,10 +192,35 @@ function MealCard({ userId, date, mealType, entry, onChange }: MealCardProps) {
 
   function handleIntakeRatio(ratio: IntakeRatio) {
     if (!entry.analysis) return
+    const base = baseMealCalories(entry.analysis)
     onChange({
       ...entry,
       intake_ratio: ratio,
-      calories:     Math.round(entry.analysis.calories * ratio),
+      calories:     Math.round(base * ratio),
+      analysis:     { ...entry.analysis, calories: base },
+    })
+  }
+
+  function startEditFoodCalorie(index: number) {
+    if (!entry.analysis?.foods[index]) return
+    setEditingFoodIdx(index)
+    setFoodCalDraft(String(entry.analysis.foods[index].calories))
+  }
+
+  function commitFoodCalorie(index: number) {
+    if (!entry.analysis) return
+    const nextCal = Math.max(0, Math.round(Number(foodCalDraft) || 0))
+    const foods = entry.analysis.foods.map((f, i) =>
+      i === index ? { ...f, calories: nextCal } : f
+    )
+    const base = foods.reduce((s, f) => s + f.calories, 0)
+    const r = getIntakeRatio(entry)
+    setEditingFoodIdx(null)
+    setFoodCalDraft('')
+    onChange({
+      ...entry,
+      analysis: { ...entry.analysis, foods, calories: base },
+      calories: Math.round(base * r),
     })
   }
 
@@ -196,7 +240,7 @@ function MealCard({ userId, date, mealType, entry, onChange }: MealCardProps) {
           </span>
           {entry.analysis && (
             <span className="text-[12px] font-bold text-pink-600 bg-pink-100 px-2 py-0.5 rounded-full">
-              {Math.round(entry.analysis.calories * getIntakeRatio(entry))} kcal
+              {Math.round(baseMealCalories(entry.analysis) * getIntakeRatio(entry))} kcal
             </span>
           )}
           {saved && <CheckCircle2 size={15} className="text-emerald-500" />}
@@ -331,20 +375,26 @@ function MealCard({ userId, date, mealType, entry, onChange }: MealCardProps) {
           {/* 분석 결과 */}
           {entry.analysis && (() => {
             const r = getIntakeRatio(entry)
+            const base = baseMealCalories(entry.analysis)
+            const na = entry.analysis.sodium_mg
+            const su = entry.analysis.sugar_g
+            const naEff = na != null ? na * r : null
+            const suEff = su != null ? su * r : null
             return (
               <div className="bg-white rounded-xl border border-pink-100 p-3">
                 <div className="flex items-center gap-3">
                   <div className="text-center">
                     <p className="text-[26px] font-bold text-pink-600 leading-none tabular-nums">
-                      {Math.round(entry.analysis.calories * r)}
+                      {Math.round(base * r)}
                     </p>
                     <p className="text-[10px] text-pink-400 mt-0.5">kcal</p>
                   </div>
-                  <div className="flex-1 grid grid-cols-3 gap-1 text-center">
+                  <div className="flex-1 grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-center">
                     {([
                       { label: '탄수화물', value: entry.analysis.carbs * r   },
                       { label: '단백질',   value: entry.analysis.protein * r },
                       { label: '지방',     value: entry.analysis.fat * r     },
+                      { label: '식이섬유', value: entry.analysis.fiber * r   },
                     ] as const).map(n => (
                       <div key={n.label}>
                         <p className="text-[13px] font-bold text-gray-700">{Math.round(n.value)}g</p>
@@ -353,13 +403,101 @@ function MealCard({ userId, date, mealType, entry, onChange }: MealCardProps) {
                     ))}
                   </div>
                 </div>
+
+                {(na != null || su != null) && (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {naEff != null && (
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full
+                          ${naEff > 500
+                            ? 'bg-amber-100 text-amber-800'
+                            : 'bg-emerald-100 text-emerald-700'}`}
+                      >
+                        {naEff > 500 ? '나트륨 주의' : '나트륨 양호'}
+                        <span className="font-normal opacity-80 ml-0.5">
+                          ({Math.round(naEff)}mg)
+                        </span>
+                      </span>
+                    )}
+                    {suEff != null && (
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full
+                          ${suEff > 20
+                            ? 'bg-amber-100 text-amber-800'
+                            : 'bg-emerald-100 text-emerald-700'}`}
+                      >
+                        {suEff > 20 ? '당류 주의' : '당류 양호'}
+                        <span className="font-normal opacity-80 ml-0.5">
+                          ({Math.round(suEff * 10) / 10}g)
+                        </span>
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {entry.analysis.foods.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-pink-100 space-y-2">
+                    <p className="text-[11px] font-semibold text-gray-600">음식별 칼로리</p>
+                    <ul className="space-y-1.5">
+                      {entry.analysis.foods.map((f, idx) => (
+                        <li key={`${f.name}-${idx}`}
+                          className="flex items-center gap-2 text-[12px] text-gray-700">
+                          <span className="flex-1 min-w-0 truncate">
+                            <span className="font-medium">{f.name}</span>
+                            {f.amount ? (
+                              <span className="text-gray-400 ml-1">{f.amount}</span>
+                            ) : null}
+                          </span>
+                          {editingFoodIdx === idx ? (
+                            <span className="flex items-center gap-1 flex-shrink-0">
+                              <input
+                                type="number"
+                                min={0}
+                                value={foodCalDraft}
+                                onChange={e => setFoodCalDraft(e.target.value)}
+                                className="w-16 px-1.5 py-0.5 rounded-md border border-pink-200 text-[12px] tabular-nums"
+                                autoFocus
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') commitFoodCalorie(idx)
+                                  if (e.key === 'Escape') {
+                                    setEditingFoodIdx(null)
+                                    setFoodCalDraft('')
+                                  }
+                                }}
+                              />
+                              <span className="text-gray-400">kcal</span>
+                              <button type="button"
+                                onClick={() => commitFoodCalorie(idx)}
+                                className="p-1 rounded-md bg-pink-500 text-white hover:bg-pink-600">
+                                <Check size={12} />
+                              </button>
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1 flex-shrink-0 tabular-nums">
+                              <span>{Math.round(f.calories * r)} kcal</span>
+                              <button type="button"
+                                onClick={() => startEditFoodCalorie(idx)}
+                                disabled={isLoading}
+                                className="p-1 rounded-md text-gray-400 hover:text-pink-600 hover:bg-pink-50
+                                  disabled:opacity-40"
+                                aria-label="칼로리 수정">
+                                <Pencil size={12} />
+                              </button>
+                            </span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
                 {entry.analysis.feedback && (
                   <p className="text-[11px] text-gray-500 mt-2 pt-2 border-t border-pink-100 leading-relaxed">
                     {entry.analysis.feedback}
                   </p>
                 )}
                 <div className="mt-3 pt-3 border-t border-pink-100 space-y-2">
-                  <p className="text-[11px] font-semibold text-gray-600">섭취량</p>
+                  <p className="text-[11px] font-semibold text-gray-600">섭취량 비율</p>
                   <div className="flex flex-wrap gap-1.5">
                     {INTAKE_OPTIONS.map(opt => {
                       const selected = getIntakeRatio(entry) === opt.ratio
@@ -393,13 +531,15 @@ function MealCard({ userId, date, mealType, entry, onChange }: MealCardProps) {
 
 // ── DailyMealPanel ────────────────────────────────────────────
 interface Props {
-  userId:   string
-  date:     string
-  entries:  MealPanelEntry[]
-  onChange: (entries: MealPanelEntry[]) => void
+  userId:          string
+  date:            string
+  entries:         MealPanelEntry[]
+  onChange:        (entries: MealPanelEntry[]) => void
+  /** 없거나 0 이하면 기본 1500kcal */
+  targetCalories?: number | null
 }
 
-export default function DailyMealPanel({ userId, date, entries, onChange }: Props) {
+export default function DailyMealPanel({ userId, date, entries, onChange, targetCalories }: Props) {
 
   const entryMap = useMemo(() => {
     const map: Partial<Record<MealType, MealPanelEntry>> = {}
@@ -411,6 +551,14 @@ export default function DailyMealPanel({ userId, date, entries, onChange }: Prop
     () => entries.reduce((sum, e) => sum + (e.calories ?? 0), 0),
     [entries]
   )
+
+  const targetKcal = useMemo(() => {
+    const t = targetCalories != null && targetCalories > 0 ? targetCalories : 1500
+    return t
+  }, [targetCalories])
+
+  const goalPct = targetKcal > 0 ? (totalCalories / targetKcal) * 100 : 0
+  const goalOver80 = goalPct > 80
 
   // 시간 기준으로 정렬된 표시 순서
   const sortedOrder = useMemo(() => {
@@ -440,19 +588,30 @@ export default function DailyMealPanel({ userId, date, entries, onChange }: Prop
   return (
     <div className="space-y-4">
 
-      {/* 총 칼로리 */}
-      {totalCalories > 0 && (
-        <div className="flex items-center justify-between
-          bg-white rounded-2xl border border-pink-100 px-4 py-3 shadow-sm">
-          <span className="text-[13px] text-gray-500 font-medium">오늘 총 섭취 칼로리</span>
-          <div className="flex items-baseline gap-1">
-            <span className="text-[22px] font-bold text-pink-500 tabular-nums">
-              {Math.round(totalCalories).toLocaleString()}
-            </span>
-            <span className="text-[13px] text-pink-400">kcal</span>
-          </div>
+      {/* 목표 대비 섭취 칼로리 */}
+      <div className="bg-white rounded-2xl border border-pink-100 px-4 py-3 shadow-sm space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[13px] text-gray-500 font-medium">목표 달성률</span>
+          <span className={`text-[13px] font-bold tabular-nums ${goalOver80 ? 'text-red-500' : 'text-pink-500'}`}>
+            {Math.round(goalPct)}%
+          </span>
         </div>
-      )}
+        <div className="h-2.5 rounded-full bg-gray-100 overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all duration-300 ${goalOver80 ? 'bg-red-400' : 'bg-pink-400'}`}
+            style={{ width: `${Math.min(goalPct, 100)}%` }}
+          />
+        </div>
+        <div className="flex items-baseline justify-between text-[12px]">
+          <span className="text-gray-600 tabular-nums">
+            오늘 <span className="font-semibold text-gray-800">{Math.round(totalCalories).toLocaleString()}</span>
+            <span className="text-gray-400"> kcal</span>
+          </span>
+          <span className="text-gray-400 tabular-nums">
+            목표 {targetKcal.toLocaleString()} kcal
+          </span>
+        </div>
+      </div>
 
       {/* 식사별 카드 — 시간순 정렬 */}
       {sortedOrder.map((mealType) => (

@@ -11,6 +11,8 @@ export const DailyLogSchema = z.object({
     protein:     z.number().nonnegative(),
     fat:         z.number().nonnegative(),
     fiber:       z.number().nonnegative(),
+    sodium_mg:   z.number().nonnegative().optional(),
+    sugar_g:     z.number().nonnegative().optional(),
     foods:       z.array(z.object({
       name:     z.string(),
       amount:   z.string(),

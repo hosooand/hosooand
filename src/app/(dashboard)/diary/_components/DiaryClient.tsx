@@ -16,7 +16,7 @@ import { ChevronLeft, ChevronRight, Save, Droplets, Moon } from 'lucide-react'
 interface Props {
   date:       string
   initialLog: DailyLog | null
-  profile:    { name: string; target_weight: number | null }
+  profile:    { name: string; target_weight: number | null; target_calories?: number | null }
   userId:     string
 }
 
@@ -255,6 +255,7 @@ export default function DiaryClient({ date, initialLog, profile, userId }: Props
             date={date}
             entries={mealEntries}
             onChange={handleMealChange}
+            targetCalories={profile.target_calories ?? null}
           />
         </Section>
 

@@ -24,7 +24,7 @@ export default async function DiaryPage({ searchParams }: Props) {
       .single(),
     supabase
       .from('profiles')
-      .select('name, target_weight')
+      .select('name, target_weight, target_calories')
       .eq('id', user.id)
       .single(),
   ])
@@ -33,7 +33,7 @@ export default async function DiaryPage({ searchParams }: Props) {
     <DiaryClient
       date={date}
       initialLog={log ?? null}
-      profile={profile ?? { name: '', target_weight: null }}
+      profile={profile ?? { name: '', target_weight: null, target_calories: null }}
       userId={user.id}
     />
   )

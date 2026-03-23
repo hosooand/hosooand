@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { normalizeMealAnalysis } from '@/lib/meal-analysis-normalize'
 
 /**
  * Vercel(및 로컬)에 필요한 환경 변수 — 이 라우트 + Supabase SSR
@@ -163,7 +164,18 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    const prompt = `당신은 10년 경력의 영양사이자 다이어트 매니저입니다. 아래 식단을 분석하고 다이어트 관점에서 평가해주세요. JSON만 반환하세요. 다른 텍스트 금지.\n\n식단: ${text}\n\n{"calories":숫자,"carbs":숫자,"protein":숫자,"fat":숫자,"fiber":숫자,"foods":[{"name":"음식명","amount":"양","calories":숫자}],"feedback":"한국어로 2문장. 첫 문장은 다이어트 관점 평가, 두번째 문장은 개선 조언.","analyzed_at":"${new Date().toISOString()}"}`
+    const prompt = `당신은 10년 경력의 영양사이자 다이어트 매니저입니다. 아래 식단을 분석하고 다이어트 관점에서 평가해주세요. JSON만 반환하세요. 다른 텍스트 금지.
+
+식단: ${text}
+
+반환 JSON 필드:
+- calories: 전체 kcal (foods의 calories 합과 일치)
+- carbs, protein, fat, fiber: 그램(g)
+- sodium_mg: 추정 나트륨 (mg)
+- sugar_g: 추정 당류 (g)
+- foods: [{name, amount, calories}]
+- feedback: 한국어 2문장 (평가 + 조언)
+- analyzed_at: "${new Date().toISOString()}" 형식 ISO 문자열`
 
     lastStep = 'STEP 6: model.generateContent()'
     log(`${lastStep} 호출 시작`)
@@ -215,10 +227,13 @@ export async function POST(req: NextRequest) {
       }, lastStep)
     }
 
+    lastStep = 'STEP 10b: normalizeMealAnalysis'
+    const normalized = normalizeMealAnalysis(analysis as Record<string, unknown>)
+
     lastStep = 'STEP 11: daily_logs upsert'
     log(lastStep)
     const { error: upsertError } = await supabase.from('daily_logs').upsert(
-      { user_id: user.id, date, meal_analysis: analysis },
+      { user_id: user.id, date, meal_analysis: normalized },
       { onConflict: 'user_id,date' },
     )
     if (upsertError) {
@@ -228,7 +243,7 @@ export async function POST(req: NextRequest) {
 
     lastStep = 'STEP 12: success'
     log(`${lastStep} → 200`)
-    return NextResponse.json(analysis, {
+    return NextResponse.json(normalized, {
       headers: { 'Content-Type': 'application/json; charset=utf-8' },
     })
   } catch (err: unknown) {
