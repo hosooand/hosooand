@@ -35,8 +35,11 @@ export interface MealPanelEntry {
   intake_ratio?: IntakeRatio
 }
 
-/** AI 분석 카드·상단 진행 바 공통 목표 (kcal) */
-const UI_GOAL_KCAL = 1500
+const DEFAULT_GOAL_KCAL = 1500
+
+function resolveGoalKcal(targetCalories: number | null | undefined): number {
+  return targetCalories != null && targetCalories > 0 ? targetCalories : DEFAULT_GOAL_KCAL
+}
 
 const INTAKE_OPTIONS: { ratio: IntakeRatio; label: string }[] = [
   { ratio: 0.25, label: '1/4' },
@@ -47,8 +50,14 @@ const INTAKE_OPTIONS: { ratio: IntakeRatio; label: string }[] = [
 
 const CAL_ACCENT = '#D4537E'
 
-function GoalCalorieProgressBlock({ currentTotal }: { currentTotal: number }) {
-  const pct = UI_GOAL_KCAL > 0 ? (currentTotal / UI_GOAL_KCAL) * 100 : 0
+function GoalCalorieProgressBlock({
+  currentTotal,
+  goalKcal,
+}: {
+  currentTotal: number
+  goalKcal:     number
+}) {
+  const pct = goalKcal > 0 ? (currentTotal / goalKcal) * 100 : 0
   const over80 = pct > 80
   return (
     <div className="space-y-1.5 w-full">
@@ -71,7 +80,7 @@ function GoalCalorieProgressBlock({ currentTotal }: { currentTotal: number }) {
         />
       </div>
       <p className="text-[11px] text-gray-500 tabular-nums leading-snug">
-        오늘 목표: {UI_GOAL_KCAL.toLocaleString()}kcal | 현재: {Math.round(currentTotal).toLocaleString()}kcal
+        오늘 목표: {goalKcal.toLocaleString()}kcal | 현재: {Math.round(currentTotal).toLocaleString()}kcal
       </p>
     </div>
   )
@@ -107,9 +116,10 @@ interface MealCardProps {
   entry:            MealPanelEntry
   onChange:         (entry: MealPanelEntry) => void
   dayTotalCalories: number
+  goalKcal:         number
 }
 
-function MealCard({ userId, date, mealType, entry, onChange, dayTotalCalories }: MealCardProps) {
+function MealCard({ userId, date, mealType, entry, onChange, dayTotalCalories, goalKcal }: MealCardProps) {
   const supabase  = createClient()
   const { style, defaultTime } = MEAL_DEFAULTS[mealType]
   const fileRef   = useRef<HTMLInputElement>(null)
@@ -465,7 +475,7 @@ function MealCard({ userId, date, mealType, entry, onChange, dayTotalCalories }:
 
                 {/* ③ 목표 칼로리 달성률 */}
                 <div className="pt-1 border-t border-pink-50">
-                  <GoalCalorieProgressBlock currentTotal={dayTotalCalories} />
+                  <GoalCalorieProgressBlock currentTotal={dayTotalCalories} goalKcal={goalKcal} />
                 </div>
 
                 {/* ④ 탄·단·지 */}
@@ -601,13 +611,14 @@ function MealCard({ userId, date, mealType, entry, onChange, dayTotalCalories }:
 
 // ── DailyMealPanel ────────────────────────────────────────────
 interface Props {
-  userId:   string
-  date:     string
-  entries:  MealPanelEntry[]
-  onChange: (entries: MealPanelEntry[]) => void
+  userId:          string
+  date:            string
+  entries:         MealPanelEntry[]
+  onChange:        (entries: MealPanelEntry[]) => void
+  targetCalories?: number | null
 }
 
-export default function DailyMealPanel({ userId, date, entries, onChange }: Props) {
+export default function DailyMealPanel({ userId, date, entries, onChange, targetCalories }: Props) {
 
   const entryMap = useMemo(() => {
     const map: Partial<Record<MealType, MealPanelEntry>> = {}
@@ -619,6 +630,8 @@ export default function DailyMealPanel({ userId, date, entries, onChange }: Prop
     () => entries.reduce((sum, e) => sum + (e.calories ?? 0), 0),
     [entries]
   )
+
+  const goalKcal = useMemo(() => resolveGoalKcal(targetCalories), [targetCalories])
 
   // 시간 기준으로 정렬된 표시 순서
   const sortedOrder = useMemo(() => {
@@ -648,9 +661,9 @@ export default function DailyMealPanel({ userId, date, entries, onChange }: Prop
   return (
     <div className="space-y-4">
 
-      {/* 목표 칼로리 달성률 (고정 1500kcal 기준) */}
+      {/* 목표 칼로리 달성률 */}
       <div className="bg-white rounded-2xl border border-pink-100 px-4 py-3 shadow-sm">
-        <GoalCalorieProgressBlock currentTotal={totalCalories} />
+        <GoalCalorieProgressBlock currentTotal={totalCalories} goalKcal={goalKcal} />
       </div>
 
       {/* 식사별 카드 — 시간순 정렬 */}
@@ -661,6 +674,7 @@ export default function DailyMealPanel({ userId, date, entries, onChange }: Prop
           date={date}
           mealType={mealType}
           dayTotalCalories={totalCalories}
+          goalKcal={goalKcal}
           entry={entryMap[mealType] ?? {
             meal_type: mealType,
             time:      null,

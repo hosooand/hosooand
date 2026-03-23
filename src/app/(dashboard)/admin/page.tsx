@@ -14,13 +14,14 @@ interface StaffNote {
 }
 
 interface Member {
-  id:             string
-  name:           string
-  height:         number | null
-  current_weight: number | null
-  avatar:         string | null
-  created_at:     string
-  member_number:  string | null
+  id:               string
+  name:             string
+  height:           number | null
+  current_weight:   number | null
+  avatar:           string | null
+  created_at:       string
+  member_number:    string | null
+  target_calories?: number | null
   has_recent_meal_entries?: boolean
 }
 
@@ -44,7 +45,7 @@ export default async function AdminPage() {
     await Promise.all([
       supabase
         .from('profiles')
-        .select('id, name, height, current_weight, avatar, created_at, member_number')
+        .select('id, name, height, current_weight, avatar, created_at, member_number, target_calories')
         .eq('role', 'member')
         .order('created_at', { ascending: false }),
       supabase

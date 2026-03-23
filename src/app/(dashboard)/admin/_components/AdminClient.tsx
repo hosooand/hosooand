@@ -19,6 +19,7 @@ interface Member {
   avatar:         string | null
   created_at:     string
   member_number:  string | null
+  target_calories?: number | null
   /** 최근 30일 daily_logs에 meal_entries(배열)가 1건 이상 있는지 */
   has_recent_meal_entries?: boolean
 }
@@ -103,7 +104,7 @@ function userIdsWithMealEntriesInLogs(
 async function fetchMembersWithMealFlags(supabase: ReturnType<typeof createClient>) {
   const { data: rows } = await supabase
     .from('profiles')
-    .select('id, name, height, current_weight, avatar, created_at, member_number')
+    .select('id, name, height, current_weight, avatar, created_at, member_number, target_calories')
     .eq('role', 'member')
     .order('created_at', { ascending: false })
 
@@ -140,6 +141,7 @@ export default function AdminClient({ members: initialMembers, staffId, initialN
 
   const [editName,   setEditName]   = useState('')
   const [editNumber, setEditNumber] = useState('')
+  const [editTargetCalories, setEditTargetCalories] = useState('')
   const [saving,     setSaving]     = useState(false)
   const [saved,      setSaved]      = useState(false)
 
@@ -219,6 +221,11 @@ export default function AdminClient({ members: initialMembers, staffId, initialN
     setSelected(member)
     setEditName(member.name ?? '')
     setEditNumber(member.member_number ?? '')
+    setEditTargetCalories(
+      member.target_calories != null && member.target_calories > 0
+        ? String(member.target_calories)
+        : ''
+    )
     setLoadingLogs(true)
 
     const from = new Date()
@@ -238,17 +245,30 @@ export default function AdminClient({ members: initialMembers, staffId, initialN
   async function saveInfo() {
     if (!selected) return
     setSaving(true)
+    const calTrim = editTargetCalories.trim()
+    let target_calories: number | null = null
+    if (calTrim !== '') {
+      const n = Number(calTrim.replace(/,/g, ''))
+      if (Number.isFinite(n) && n > 0) target_calories = Math.round(n)
+    }
+
     await supabase
       .from('profiles')
-      .update({ name: editName, member_number: editNumber })
+      .update({
+        name:            editName,
+        member_number:   editNumber || null,
+        target_calories: target_calories,
+      })
       .eq('id', selected.id)
 
     setMembers(prev => prev.map(m =>
       m.id === selected.id
-        ? { ...m, name: editName, member_number: editNumber }
+        ? { ...m, name: editName, member_number: editNumber, target_calories }
         : m
     ))
-    setSelected(prev => prev ? { ...prev, name: editName, member_number: editNumber } : prev)
+    setSelected(prev => prev
+      ? { ...prev, name: editName, member_number: editNumber, target_calories }
+      : prev)
     setSaving(false)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
@@ -498,6 +518,22 @@ export default function AdminClient({ members: initialMembers, staffId, initialN
                     placeholder="예: 2024-001"
                     className="w-full h-[38px] px-3 rounded-[8px] border border-gray-200
                       text-[13px] outline-none focus:border-pink-400 transition-all bg-white" />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-[11px] text-gray-400 mb-1">목표 칼로리</label>
+                  <input
+                    type="number"
+                    min={1}
+                    step={1}
+                    inputMode="numeric"
+                    value={editTargetCalories}
+                    onChange={e => setEditTargetCalories(e.target.value)}
+                    placeholder="예: 1500"
+                    className="w-full h-[38px] px-3 rounded-[8px] border border-gray-200
+                      text-[13px] outline-none focus:border-pink-400 transition-all bg-white
+                      [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none
+                      [&::-webkit-inner-spin-button]:appearance-none"
+                  />
                 </div>
               </div>
               <button type="button" onClick={saveInfo} disabled={saving}
