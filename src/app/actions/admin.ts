@@ -107,7 +107,6 @@ export async function createStaffByAdmin({
     }
 
     const adminClient = createAdminClient()
-    // 직원은 관리자가 등록하므로 이메일 인증 링크 없이 즉시 로그인 가능해야 함 (Supabase: email_confirm)
     const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
       email:         email.trim(),
       password,
