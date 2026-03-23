@@ -1,7 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
-import { useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 import { Camera, Loader2, Sparkles, RefreshCw, X, ChevronDown, ChevronUp, CheckCircle2, Clock } from 'lucide-react'
@@ -56,6 +55,10 @@ function MealCard({ userId, date, mealType, entry, onChange }: MealCardProps) {
   const [inputMode, setInputMode] = useState<'photo' | 'text'>('photo')
   const [content,   setContent]   = useState(entry.content ?? '')
   const [uploading, setUploading] = useState(false)
+
+  useEffect(() => {
+    setContent(entry.content ?? '')
+  }, [date, entry.content])
   const [analyzing, setAnalyzing] = useState(false)
   const [expanded,  setExpanded]  = useState(true)
   const [error,     setError]     = useState<string | null>(null)
