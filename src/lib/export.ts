@@ -36,6 +36,11 @@ const MEAL_DEFAULTS: Record<MealType, string> = {
   아침: '08:00', 점심: '12:00', 저녁: '18:00', 간식: '15:00',
 }
 
+/** 괄호 안 영어 번역 제거 (엑셀 등 표시용) */
+export function removeEnglishInParens(text: string): string {
+  return text.replace(/\s*\([A-Za-z\s&,]+\)/g, '').trim()
+}
+
 // 열 너비 (pt 단위 근사값, 1col ≈ 8px)
 const COL_WIDTHS = [16, 32, 32, 32, 22, 10, 14]
 
@@ -86,7 +91,8 @@ function getMealText(entry: MealPanelEntry | null, mealType: MealType): string {
   }
   if (entry.analysis?.foods && entry.analysis.foods.length > 0) {
     entry.analysis.foods.forEach(f => {
-      lines.push(`${f.name} ${f.amount} (${Math.round(f.calories * ratio)}kcal)`)
+      const name = removeEnglishInParens(f.name)
+      lines.push(`${name} ${f.amount} (${Math.round(f.calories * ratio)}kcal)`)
     })
   } else if (entry.content) {
     lines.push(entry.content)
@@ -249,7 +255,9 @@ export async function generateMemberExcel(
         const cal   = entry.calories ?? entry.analysis?.calories ?? 0
         const foods = entry.analysis?.foods ?? []
         const foodLines = foods.length > 0
-          ? foods.map(f => `${f.name} (${Math.round(f.calories)}kcal)`).join('\n')
+          ? foods.map(f =>
+            `${removeEnglishInParens(f.name)} (${Math.round(f.calories)}kcal)`
+          ).join('\n')
           : entry.content ?? ''
         const bottomText = [
           foodLines,
