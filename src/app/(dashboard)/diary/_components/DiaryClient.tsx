@@ -255,7 +255,6 @@ export default function DiaryClient({ date, initialLog, profile, userId }: Props
             date={date}
             entries={mealEntries}
             onChange={handleMealChange}
-            targetCalories={profile.target_calories ?? null}
           />
         </Section>
 

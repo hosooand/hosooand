@@ -35,12 +35,47 @@ export interface MealPanelEntry {
   intake_ratio?: IntakeRatio
 }
 
+/** AI 분석 카드·상단 진행 바 공통 목표 (kcal) */
+const UI_GOAL_KCAL = 1500
+
 const INTAKE_OPTIONS: { ratio: IntakeRatio; label: string }[] = [
   { ratio: 0.25, label: '1/4' },
   { ratio: 0.5,  label: '1/2' },
   { ratio: 0.75, label: '3/4' },
-  { ratio: 1,    label: '전부 (기본)' },
+  { ratio: 1,    label: '전부' },
 ]
+
+const CAL_ACCENT = '#D4537E'
+
+function GoalCalorieProgressBlock({ currentTotal }: { currentTotal: number }) {
+  const pct = UI_GOAL_KCAL > 0 ? (currentTotal / UI_GOAL_KCAL) * 100 : 0
+  const over80 = pct > 80
+  return (
+    <div className="space-y-1.5 w-full">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[13px] font-medium text-gray-800">목표 칼로리 달성률</span>
+        <span
+          className={`text-[13px] font-bold tabular-nums ${over80 ? 'text-red-500' : ''}`}
+          style={!over80 ? { color: CAL_ACCENT } : undefined}
+        >
+          {Math.round(pct)}%
+        </span>
+      </div>
+      <div className="h-[6px] rounded-full bg-gray-100 overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all duration-300 ${over80 ? 'bg-red-500' : ''}`}
+          style={{
+            width: `${Math.min(pct, 100)}%`,
+            ...(!over80 ? { backgroundColor: CAL_ACCENT, opacity: 0.85 } : {}),
+          }}
+        />
+      </div>
+      <p className="text-[11px] text-gray-500 tabular-nums leading-snug">
+        오늘 목표: {UI_GOAL_KCAL.toLocaleString()}kcal | 현재: {Math.round(currentTotal).toLocaleString()}kcal
+      </p>
+    </div>
+  )
+}
 
 function getIntakeRatio(entry: MealPanelEntry): number {
   const r = entry.intake_ratio
@@ -66,14 +101,15 @@ const MEAL_DEFAULTS: Record<MealType, { style: { bg: string; badge: string; labe
 
 // ── MealCard ──────────────────────────────────────────────────
 interface MealCardProps {
-  userId:   string
-  date:     string
-  mealType: MealType
-  entry:    MealPanelEntry
-  onChange: (entry: MealPanelEntry) => void
+  userId:           string
+  date:             string
+  mealType:         MealType
+  entry:            MealPanelEntry
+  onChange:         (entry: MealPanelEntry) => void
+  dayTotalCalories: number
 }
 
-function MealCard({ userId, date, mealType, entry, onChange }: MealCardProps) {
+function MealCard({ userId, date, mealType, entry, onChange, dayTotalCalories }: MealCardProps) {
   const supabase  = createClient()
   const { style, defaultTime } = MEAL_DEFAULTS[mealType]
   const fileRef   = useRef<HTMLInputElement>(null)
@@ -239,7 +275,10 @@ function MealCard({ userId, date, mealType, entry, onChange }: MealCardProps) {
             {style.emoji} {style.label}
           </span>
           {entry.analysis && (
-            <span className="text-[12px] font-bold text-pink-600 bg-pink-100 px-2 py-0.5 rounded-full">
+            <span
+              className="text-[12px] font-bold bg-pink-100 px-2 py-0.5 rounded-full tabular-nums"
+              style={{ color: CAL_ACCENT }}
+            >
               {Math.round(baseMealCalories(entry.analysis) * getIntakeRatio(entry))} kcal
             </span>
           )}
@@ -372,80 +411,129 @@ function MealCard({ userId, date, mealType, entry, onChange }: MealCardProps) {
             <p className="text-[12px] text-rose-500 bg-rose-50 px-3 py-2 rounded-xl">{error}</p>
           )}
 
-          {/* 분석 결과 */}
+          {/* 분석 결과 — 순서: ①칼로리 ②섭취량 ③목표달성 ④매크로 ⑤배지 ⑥음식 ⑦피드백 */}
           {entry.analysis && (() => {
             const r = getIntakeRatio(entry)
             const base = baseMealCalories(entry.analysis)
+            const scaled = Math.round(base * r)
             const na = entry.analysis.sodium_mg
             const su = entry.analysis.sugar_g
+            const fi = entry.analysis.fiber
             const naEff = na != null ? na * r : null
             const suEff = su != null ? su * r : null
+            const fiEff = fi * r
             return (
-              <div className="bg-white rounded-xl border border-pink-100 p-3">
-                <div className="flex items-center gap-3">
-                  <div className="text-center">
-                    <p className="text-[26px] font-bold text-pink-600 leading-none tabular-nums">
-                      {Math.round(base * r)}
-                    </p>
-                    <p className="text-[10px] text-pink-400 mt-0.5">kcal</p>
-                  </div>
-                  <div className="flex-1 grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-center">
-                    {([
-                      { label: '탄수화물', value: entry.analysis.carbs * r   },
-                      { label: '단백질',   value: entry.analysis.protein * r },
-                      { label: '지방',     value: entry.analysis.fat * r     },
-                      { label: '식이섬유', value: entry.analysis.fiber * r   },
-                    ] as const).map(n => (
-                      <div key={n.label}>
-                        <p className="text-[13px] font-bold text-gray-700">{Math.round(n.value)}g</p>
-                        <p className="text-[10px] text-gray-400">{n.label}</p>
-                      </div>
-                    ))}
-                  </div>
+              <div className="bg-white rounded-xl border border-pink-100 p-3 space-y-4">
+
+                {/* ① 칼로리 */}
+                <div className="text-center">
+                  <p
+                    className="text-[28px] font-bold leading-none tabular-nums"
+                    style={{ color: CAL_ACCENT }}
+                  >
+                    {scaled}
+                    <span className="text-[15px] font-semibold ml-0.5">kcal</span>
+                  </p>
+                  <p className="text-[11px] text-gray-400 mt-1 tabular-nums">
+                    (원본 {Math.round(base)}kcal)
+                  </p>
                 </div>
 
-                {(na != null || su != null) && (
-                  <div className="flex flex-wrap gap-1.5 mt-2">
-                    {naEff != null && (
-                      <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full
-                          ${naEff > 500
-                            ? 'bg-amber-100 text-amber-800'
-                            : 'bg-emerald-100 text-emerald-700'}`}
+                {/* ② 섭취량 */}
+                <div className="grid grid-cols-4 gap-1.5">
+                  {INTAKE_OPTIONS.map(opt => {
+                    const selected = getIntakeRatio(entry) === opt.ratio
+                    return (
+                      <button
+                        key={opt.ratio}
+                        type="button"
+                        onClick={() => handleIntakeRatio(opt.ratio)}
+                        disabled={isLoading}
+                        className={`py-2 rounded-lg text-[11px] font-semibold transition-all
+                          disabled:opacity-50 disabled:cursor-not-allowed
+                          ${selected
+                            ? 'text-white shadow-sm'
+                            : 'bg-gray-50 text-gray-600 border border-gray-100 hover:bg-pink-50/80'
+                          }`}
+                        style={selected ? { backgroundColor: CAL_ACCENT } : undefined}
                       >
-                        {naEff > 500 ? '나트륨 주의' : '나트륨 양호'}
-                        <span className="font-normal opacity-80 ml-0.5">
-                          ({Math.round(naEff)}mg)
-                        </span>
-                      </span>
-                    )}
-                    {suEff != null && (
-                      <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full
-                          ${suEff > 20
-                            ? 'bg-amber-100 text-amber-800'
-                            : 'bg-emerald-100 text-emerald-700'}`}
-                      >
-                        {suEff > 20 ? '당류 주의' : '당류 양호'}
-                        <span className="font-normal opacity-80 ml-0.5">
-                          ({Math.round(suEff * 10) / 10}g)
-                        </span>
-                      </span>
-                    )}
-                  </div>
-                )}
+                        {opt.label}
+                      </button>
+                    )
+                  })}
+                </div>
 
+                {/* ③ 목표 칼로리 달성률 */}
+                <div className="pt-1 border-t border-pink-50">
+                  <GoalCalorieProgressBlock currentTotal={dayTotalCalories} />
+                </div>
+
+                {/* ④ 탄·단·지 */}
+                <div className="grid grid-cols-3 gap-2">
+                  {([
+                    { label: '탄수화물', value: entry.analysis.carbs * r   },
+                    { label: '단백질',   value: entry.analysis.protein * r },
+                    { label: '지방',     value: entry.analysis.fat * r     },
+                  ] as const).map(n => (
+                    <div
+                      key={n.label}
+                      className="rounded-xl bg-pink-50/60 px-2 py-2.5 text-center border border-pink-100/50"
+                    >
+                      <p className="text-[14px] font-bold text-gray-800 tabular-nums">
+                        {Math.round(n.value)}g
+                      </p>
+                      <p className="text-[10px] text-gray-500 mt-0.5">{n.label}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* ⑤ 나트륨·당류·식이섬유 */}
+                <div className="flex flex-wrap gap-1.5 justify-center">
+                  {naEff != null && (
+                    <span
+                      className={`text-[10px] font-bold px-2.5 py-1 rounded-full
+                        ${naEff > 500
+                          ? 'bg-orange-100 text-orange-800'
+                          : 'bg-emerald-100 text-emerald-700'}`}
+                    >
+                      {naEff > 500 ? '나트륨 주의' : '나트륨 양호'}
+                      <span className="font-normal opacity-90 ml-0.5">
+                        ({Math.round(naEff)}mg)
+                      </span>
+                    </span>
+                  )}
+                  {suEff != null && (
+                    <span
+                      className={`text-[10px] font-bold px-2.5 py-1 rounded-full
+                        ${suEff > 20
+                          ? 'bg-orange-100 text-orange-800'
+                          : 'bg-emerald-100 text-emerald-700'}`}
+                    >
+                      {suEff > 20 ? '당류 주의' : '당류 양호'}
+                      <span className="font-normal opacity-90 ml-0.5">
+                        ({Math.round(suEff * 10) / 10}g)
+                      </span>
+                    </span>
+                  )}
+                  <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700">
+                    식이섬유 {Math.round(fiEff * 10) / 10}g
+                  </span>
+                </div>
+
+                {/* ⑥ 음식별 칼로리 */}
                 {entry.analysis.foods.length > 0 && (
-                  <div className="mt-3 pt-3 border-t border-pink-100 space-y-2">
+                  <div className="space-y-2">
                     <p className="text-[11px] font-semibold text-gray-600">음식별 칼로리</p>
-                    <ul className="space-y-1.5">
+                    <ul className="space-y-2">
                       {entry.analysis.foods.map((f, idx) => (
-                        <li key={`${f.name}-${idx}`}
-                          className="flex items-center gap-2 text-[12px] text-gray-700">
+                        <li
+                          key={`${f.name}-${idx}`}
+                          className="flex items-center gap-2 text-[13px] text-gray-800"
+                        >
                           <span className="flex-1 min-w-0 truncate">
                             <span className="font-medium">{f.name}</span>
                             {f.amount ? (
-                              <span className="text-gray-400 ml-1">{f.amount}</span>
+                              <span className="text-gray-400 font-normal ml-1 text-[12px]">{f.amount}</span>
                             ) : null}
                           </span>
                           {editingFoodIdx === idx ? (
@@ -455,7 +543,7 @@ function MealCard({ userId, date, mealType, entry, onChange }: MealCardProps) {
                                 min={0}
                                 value={foodCalDraft}
                                 onChange={e => setFoodCalDraft(e.target.value)}
-                                className="w-16 px-1.5 py-0.5 rounded-md border border-pink-200 text-[12px] tabular-nums"
+                                className="w-[4.5rem] px-2 py-1 rounded-lg border border-pink-200 text-[12px] tabular-nums"
                                 autoFocus
                                 onKeyDown={e => {
                                   if (e.key === 'Enter') commitFoodCalorie(idx)
@@ -465,23 +553,28 @@ function MealCard({ userId, date, mealType, entry, onChange }: MealCardProps) {
                                   }
                                 }}
                               />
-                              <span className="text-gray-400">kcal</span>
-                              <button type="button"
+                              <span className="text-gray-400 text-[12px]">kcal</span>
+                              <button
+                                type="button"
                                 onClick={() => commitFoodCalorie(idx)}
-                                className="p-1 rounded-md bg-pink-500 text-white hover:bg-pink-600">
-                                <Check size={12} />
+                                className="p-1.5 rounded-lg text-white"
+                                style={{ backgroundColor: CAL_ACCENT }}
+                              >
+                                <Check size={14} />
                               </button>
                             </span>
                           ) : (
-                            <span className="flex items-center gap-1 flex-shrink-0 tabular-nums">
-                              <span>{Math.round(f.calories * r)} kcal</span>
-                              <button type="button"
+                            <span className="flex items-center gap-1.5 flex-shrink-0 tabular-nums">
+                              <span className="text-gray-700">{Math.round(f.calories * r)} kcal</span>
+                              <button
+                                type="button"
                                 onClick={() => startEditFoodCalorie(idx)}
                                 disabled={isLoading}
-                                className="p-1 rounded-md text-gray-400 hover:text-pink-600 hover:bg-pink-50
-                                  disabled:opacity-40"
-                                aria-label="칼로리 수정">
-                                <Pencil size={12} />
+                                className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-pink-400/90
+                                  disabled:opacity-40 transition-colors"
+                                aria-label="칼로리 수정"
+                              >
+                                <Pencil size={14} />
                               </button>
                             </span>
                           )}
@@ -491,35 +584,12 @@ function MealCard({ userId, date, mealType, entry, onChange }: MealCardProps) {
                   </div>
                 )}
 
-                {entry.analysis.feedback && (
-                  <p className="text-[11px] text-gray-500 mt-2 pt-2 border-t border-pink-100 leading-relaxed">
+                {/* ⑦ AI 피드백 */}
+                {entry.analysis.feedback ? (
+                  <p className="text-[12px] text-gray-600 leading-relaxed pt-2 border-t border-pink-50">
                     {entry.analysis.feedback}
                   </p>
-                )}
-                <div className="mt-3 pt-3 border-t border-pink-100 space-y-2">
-                  <p className="text-[11px] font-semibold text-gray-600">섭취량 비율</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {INTAKE_OPTIONS.map(opt => {
-                      const selected = getIntakeRatio(entry) === opt.ratio
-                      return (
-                        <button
-                          key={opt.ratio}
-                          type="button"
-                          onClick={() => handleIntakeRatio(opt.ratio)}
-                          disabled={isLoading}
-                          className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all
-                            border disabled:opacity-50 disabled:cursor-not-allowed
-                            ${selected
-                              ? 'border-pink-400 bg-pink-50 text-pink-700 shadow-sm'
-                              : 'border-gray-200 bg-white text-gray-600 hover:border-pink-200 hover:bg-pink-50/50'
-                            }`}
-                        >
-                          {opt.label}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
+                ) : null}
               </div>
             )
           })()}
@@ -531,15 +601,13 @@ function MealCard({ userId, date, mealType, entry, onChange }: MealCardProps) {
 
 // ── DailyMealPanel ────────────────────────────────────────────
 interface Props {
-  userId:          string
-  date:            string
-  entries:         MealPanelEntry[]
-  onChange:        (entries: MealPanelEntry[]) => void
-  /** 없거나 0 이하면 기본 1500kcal */
-  targetCalories?: number | null
+  userId:   string
+  date:     string
+  entries:  MealPanelEntry[]
+  onChange: (entries: MealPanelEntry[]) => void
 }
 
-export default function DailyMealPanel({ userId, date, entries, onChange, targetCalories }: Props) {
+export default function DailyMealPanel({ userId, date, entries, onChange }: Props) {
 
   const entryMap = useMemo(() => {
     const map: Partial<Record<MealType, MealPanelEntry>> = {}
@@ -551,14 +619,6 @@ export default function DailyMealPanel({ userId, date, entries, onChange, target
     () => entries.reduce((sum, e) => sum + (e.calories ?? 0), 0),
     [entries]
   )
-
-  const targetKcal = useMemo(() => {
-    const t = targetCalories != null && targetCalories > 0 ? targetCalories : 1500
-    return t
-  }, [targetCalories])
-
-  const goalPct = targetKcal > 0 ? (totalCalories / targetKcal) * 100 : 0
-  const goalOver80 = goalPct > 80
 
   // 시간 기준으로 정렬된 표시 순서
   const sortedOrder = useMemo(() => {
@@ -588,29 +648,9 @@ export default function DailyMealPanel({ userId, date, entries, onChange, target
   return (
     <div className="space-y-4">
 
-      {/* 목표 대비 섭취 칼로리 */}
-      <div className="bg-white rounded-2xl border border-pink-100 px-4 py-3 shadow-sm space-y-2">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-[13px] text-gray-500 font-medium">목표 달성률</span>
-          <span className={`text-[13px] font-bold tabular-nums ${goalOver80 ? 'text-red-500' : 'text-pink-500'}`}>
-            {Math.round(goalPct)}%
-          </span>
-        </div>
-        <div className="h-2.5 rounded-full bg-gray-100 overflow-hidden">
-          <div
-            className={`h-full rounded-full transition-all duration-300 ${goalOver80 ? 'bg-red-400' : 'bg-pink-400'}`}
-            style={{ width: `${Math.min(goalPct, 100)}%` }}
-          />
-        </div>
-        <div className="flex items-baseline justify-between text-[12px]">
-          <span className="text-gray-600 tabular-nums">
-            오늘 <span className="font-semibold text-gray-800">{Math.round(totalCalories).toLocaleString()}</span>
-            <span className="text-gray-400"> kcal</span>
-          </span>
-          <span className="text-gray-400 tabular-nums">
-            목표 {targetKcal.toLocaleString()} kcal
-          </span>
-        </div>
+      {/* 목표 칼로리 달성률 (고정 1500kcal 기준) */}
+      <div className="bg-white rounded-2xl border border-pink-100 px-4 py-3 shadow-sm">
+        <GoalCalorieProgressBlock currentTotal={totalCalories} />
       </div>
 
       {/* 식사별 카드 — 시간순 정렬 */}
@@ -620,6 +660,7 @@ export default function DailyMealPanel({ userId, date, entries, onChange, target
           userId={userId}
           date={date}
           mealType={mealType}
+          dayTotalCalories={totalCalories}
           entry={entryMap[mealType] ?? {
             meal_type: mealType,
             time:      null,
