@@ -40,42 +40,44 @@ export default async function AdminPage() {
     profile?.role === 'admin' || (profile?.role === 'staff' && profile?.is_approved === true)
   if (!allowed) redirect('/dashboard')
 
-  // members + notes는 서로 독립이므로 병렬 실행
-  const [{ data: members, error: membersError }, { data: notesRaw, error: notesError }] =
-    await Promise.all([
-      supabase
-        .from('profiles')
-        .select('id, name, height, current_weight, avatar, created_at, member_number, target_calories')
-        .eq('role', 'member')
-        .order('created_at', { ascending: false }),
-      supabase
-        .from('staff_notes')
-        .select('id, member_id, staff_id, content, created_at, updated_at')
-        .order('created_at', { ascending: false }),
-    ])
+  const { data: members, error: membersError } = await supabase
+    .from('profiles')
+    .select('id, name, height, current_weight, avatar, created_at, member_number, target_calories')
+    .eq('role', 'member')
+    .order('created_at', { ascending: false })
+
+  const memberList = members ?? []
+  const memberIds = memberList.map(m => m.id)
+  const from = new Date()
+  from.setDate(from.getDate() - 30)
+  const fromStr = from.toLocaleDateString('en-CA')
+
+  // notes는 members와 무관, meal_logs는 memberIds 필요 → members 확정 후 둘을 병렬 실행
+  const [notesResult, mealLogsResult] = await Promise.all([
+    supabase
+      .from('staff_notes')
+      .select('id, member_id, staff_id, content, created_at, updated_at')
+      .order('created_at', { ascending: false }),
+    memberIds.length > 0
+      ? supabase
+          .from('daily_logs')
+          .select('user_id, meal_entries')
+          .gte('date', fromStr)
+          .in('user_id', memberIds)
+      : Promise.resolve({ data: null as { user_id: string; meal_entries: unknown }[] | null, error: null }),
+  ])
+
+  const { data: notesRaw, error: notesError } = notesResult
+  const { data: mealLogs } = mealLogsResult
 
   console.log('DB에서 조회한 고객 데이터:', members)
   console.log('고객 조회 에러:', membersError)
   console.log('DB에서 조회한 메모 데이터:', notesRaw)
   console.log('메모 조회 에러:', notesError)
 
-  // 최근 30일 daily_logs 중 meal_entries가 있는 회원 표시용 (members 필요)
-  const memberList = members ?? []
-  const memberIds = memberList.map(m => m.id)
   const mealUserIds = new Set<string>()
-  if (memberIds.length > 0) {
-    const from = new Date()
-    from.setDate(from.getDate() - 30)
-    const fromStr = from.toLocaleDateString('en-CA')
-    const { data: mealLogs } = await supabase
-      .from('daily_logs')
-      .select('user_id, meal_entries')
-      .gte('date', fromStr)
-      .in('user_id', memberIds)
-
-    for (const row of mealLogs ?? []) {
-      if (mealEntriesHasRecords(row.meal_entries)) mealUserIds.add(row.user_id)
-    }
+  for (const row of mealLogs ?? []) {
+    if (mealEntriesHasRecords(row.meal_entries)) mealUserIds.add(row.user_id)
   }
 
   const membersWithMealFlag: Member[] = memberList.map(m => ({

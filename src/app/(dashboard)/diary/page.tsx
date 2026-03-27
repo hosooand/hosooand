@@ -8,10 +8,12 @@ interface Props {
 
 export default async function DiaryPage({ searchParams }: Props) {
   const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const [{ data: { user } }, params] = await Promise.all([
+    supabase.auth.getUser(),
+    searchParams,
+  ])
   if (!user) redirect('/login')
 
-  const params = await searchParams
   const date = params.date ?? new Date().toLocaleDateString('en-CA')
 
   // date 기반 log + profile은 서로 독립이므로 병렬 실행
