@@ -4,6 +4,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 import { Camera, Loader2, Sparkles, RefreshCw, X, ChevronDown, ChevronUp, CheckCircle2, Clock, Pencil, Check } from 'lucide-react'
+import duckRun from '@/assets/images/duck-run.png'
+import duckGym from '@/assets/images/duck-gym.png'
+import duckPilates from '@/assets/images/duck-pilates.png'
+
+const DUCK_RESULT_FRAMES = [duckRun, duckGym, duckPilates] as const
 
 // ── 타입 ──────────────────────────────────────────────────────
 export type MealType = '아침' | '점심' | '저녁' | '간식'
@@ -49,6 +54,116 @@ const INTAKE_OPTIONS: { ratio: IntakeRatio; label: string }[] = [
 ]
 
 const CAL_ACCENT = '#D4537E'
+
+/** 마지막 단계: 통통이 3프레임 루프 (0.6초 간격), 고정 박스로 레이아웃 시프트 방지 */
+function DuckResultFrameAnimation() {
+  const [frameIndex, setFrameIndex] = useState(0)
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setFrameIndex((i) => (i + 1) % DUCK_RESULT_FRAMES.length)
+    }, 600)
+    return () => clearInterval(id)
+  }, [])
+
+  return (
+    <div className="flex justify-center w-full py-1">
+      <div className="relative h-[7.5rem] w-[7.5rem] sm:h-32 sm:w-32 flex-shrink-0 mx-auto">
+        <Image
+          src={DUCK_RESULT_FRAMES[frameIndex]}
+          alt="통통이"
+          fill
+          className="object-contain object-center pointer-events-none select-none"
+          sizes="128px"
+          priority
+        />
+      </div>
+    </div>
+  )
+}
+
+/** 분석 대기 중 — setInterval로 단계 문구 전환 + 스켈레톤 (사진/텍스트 첫 문구만 구분) */
+function MealAnalysisProgressBox({ inputMode }: { inputMode: 'photo' | 'text' }) {
+  const [phase, setPhase] = useState<0 | 1 | 2>(0)
+
+  useEffect(() => {
+    const t0 = Date.now()
+    const tick = () => {
+      const elapsedSec = (Date.now() - t0) / 1000
+      if (elapsedSec < 1.5) setPhase(0)
+      else if (elapsedSec < 3) setPhase(1)
+      else setPhase(2)
+    }
+    tick()
+    const id = setInterval(tick, 100)
+    return () => clearInterval(id)
+  }, [])
+
+  const isPreparingResult = phase === 2
+
+  const phase0 =
+    inputMode === 'photo'
+      ? '식단 이미지를 스캔하고 있습니다 📸'
+      : '작성하신 식단을 확인하고 있습니다 ✏️'
+  const lines = [
+    phase0,
+    'AI가 영양 성분을 꼼꼼히 계산 중입니다 🧠',
+  ] as const
+
+  const barPct = phase === 0 ? 30 : phase === 1 ? 65 : 95
+
+  return (
+    <div
+      className="rounded-2xl border border-pink-100 bg-gradient-to-b from-white via-white to-pink-50/40
+        p-5 shadow-lg shadow-pink-100/25 ring-1 ring-pink-100/50 space-y-4
+        transition-all duration-300 ease-out"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+    >
+      {!isPreparingResult && (
+        <div className="flex justify-center">
+          <div className="h-9 w-36 rounded-xl bg-pink-100/90 animate-pulse" />
+        </div>
+      )}
+      <div className="h-2 rounded-full bg-pink-100/80 overflow-hidden">
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-pink-400 to-rose-400 transition-[width] duration-500 ease-out"
+          style={{ width: `${barPct}%` }}
+        />
+      </div>
+      {!isPreparingResult ? (
+        <>
+          <div className="grid grid-cols-3 gap-2">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="h-16 rounded-xl bg-pink-50 border border-pink-100/60 animate-pulse" />
+            ))}
+          </div>
+          <div className="flex flex-wrap justify-center gap-2">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="h-6 w-[4.5rem] rounded-full bg-pink-100/70 animate-pulse" />
+            ))}
+          </div>
+        </>
+      ) : (
+        <DuckResultFrameAnimation />
+      )}
+      <p
+        className="text-center text-[14px] font-semibold text-gray-800 leading-snug min-h-[3.25rem]
+          flex items-center justify-center px-1 transition-opacity duration-300"
+      >
+        {isPreparingResult
+          ? '통통이가 결과를 예쁘게 정리 중입니다 💪'
+          : lines[phase]}
+      </p>
+      {!isPreparingResult && (
+        <div className="flex justify-center pt-1">
+          <Loader2 className="w-6 h-6 text-pink-500 animate-spin opacity-80" aria-hidden />
+        </div>
+      )}
+    </div>
+  )
+}
 
 function GoalCalorieProgressBlock({
   currentTotal,
@@ -132,6 +247,7 @@ function MealCard({ userId, date, mealType, entry, onChange, dayTotalCalories, g
     setContent(entry.content ?? '')
   }, [date, entry.content])
   const [analyzing, setAnalyzing] = useState(false)
+  const [analyzeUiKey, setAnalyzeUiKey] = useState(0)
   const [expanded,  setExpanded]  = useState(true)
   const [error,     setError]     = useState<string | null>(null)
   const [saved,     setSaved]     = useState(false)
@@ -169,14 +285,22 @@ function MealCard({ userId, date, mealType, entry, onChange, dayTotalCalories, g
     try {
       const url = await uploadFile(file)
       setUploading(false)
+      setAnalyzeUiKey((k) => k + 1)
       setAnalyzing(true)
       const res = await fetch('/api/analyze-meal', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ imageUrl: url, date }),
       })
-      if (!res.ok) throw new Error('이미지 분석 실패')
-      const analysis: MealAnalysis = await res.json()
+      const raw = await res.json()
+      if (!res.ok) {
+        const msg =
+          typeof (raw as { error?: string }).error === 'string'
+            ? (raw as { error: string }).error
+            : '이미지 분석 실패'
+        throw new Error(msg)
+      }
+      const analysis = raw as MealAnalysis
       const base = baseMealCalories(analysis)
       onChange({
         ...entry,
@@ -198,6 +322,7 @@ function MealCard({ userId, date, mealType, entry, onChange, dayTotalCalories, g
   async function handleAnalyzeText() {
     if (!content.trim()) return
     setError(null)
+    setAnalyzeUiKey((k) => k + 1)
     setAnalyzing(true)
     try {
       const res = await fetch('/api/analyze-meal-text', {
@@ -205,8 +330,12 @@ function MealCard({ userId, date, mealType, entry, onChange, dayTotalCalories, g
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ text: content, date }),
       })
-      if (!res.ok) throw new Error('텍스트 분석 실패')
-      const analysis: MealAnalysis = await res.json()
+      const raw = await res.json()
+      if (!res.ok) {
+        const errObj = (raw as { error?: { message?: string } }).error
+        throw new Error(errObj?.message ?? '텍스트 분석 실패')
+      }
+      const analysis = raw as MealAnalysis
       const base = baseMealCalories(analysis)
       onChange({
         ...entry,
@@ -284,7 +413,7 @@ function MealCard({ userId, date, mealType, entry, onChange, dayTotalCalories, g
           <span className={`text-[13px] font-semibold px-2.5 py-1 rounded-full ${style.badge}`}>
             {style.emoji} {style.label}
           </span>
-          {entry.analysis && (
+          {entry.analysis && !analyzing && (
             <span
               className="text-[12px] font-bold bg-pink-100 px-2 py-0.5 rounded-full tabular-nums"
               style={{ color: CAL_ACCENT }}
@@ -314,115 +443,121 @@ function MealCard({ userId, date, mealType, entry, onChange, dayTotalCalories, g
       {expanded && (
         <div className="px-4 pb-4 space-y-3">
 
-          {/* 시간 선택 */}
-          <div className="flex items-center gap-2 bg-white/70 rounded-xl px-3 py-2">
-            <Clock size={13} className="text-gray-400 flex-shrink-0" />
-            <span className="text-[12px] text-gray-400 flex-shrink-0">식사 시간</span>
-            <input
-              type="time"
-              value={currentTime}
-              onChange={e => handleTimeChange(e.target.value)}
-              className="flex-1 text-[13px] font-semibold text-gray-700
-                bg-transparent outline-none cursor-pointer
-                [&::-webkit-calendar-picker-indicator]:opacity-50
-                [&::-webkit-calendar-picker-indicator]:cursor-pointer"
-            />
-          </div>
-
-          {/* 탭 */}
-          <div className="flex gap-2 p-1 bg-white/70 rounded-xl">
-            <button type="button" onClick={() => setInputMode('photo')}
-              className={`flex-1 py-1.5 rounded-lg text-[12px] font-semibold transition-all
-                ${inputMode === 'photo' ? 'bg-white text-pink-600 shadow-sm' : 'text-gray-400'}`}>
-              📷 사진
-            </button>
-            <button type="button" onClick={() => setInputMode('text')}
-              className={`flex-1 py-1.5 rounded-lg text-[12px] font-semibold transition-all
-                ${inputMode === 'text' ? 'bg-white text-pink-600 shadow-sm' : 'text-gray-400'}`}>
-              ✏️ 직접입력
-            </button>
-          </div>
-
-          {/* 사진 모드 */}
-          {inputMode === 'photo' && (
-            entry.image_url ? (
-              <div className="relative w-full rounded-xl overflow-hidden">
-                <div className="relative w-full aspect-[4/3]">
-                  <Image src={entry.image_url} alt={`${mealType} 식단`} fill
-                    className="object-cover" sizes="(max-width: 640px) 100vw, 400px" />
-                  {isLoading && (
-                    <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center gap-2">
-                      <Loader2 size={28} className="text-white animate-spin" />
-                      <p className="text-white text-[13px] font-medium">
-                        {uploading ? '업로드 중...' : 'AI 분석 중...'}
-                      </p>
-                    </div>
-                  )}
-                </div>
-                {!isLoading && (
-                  <button type="button" onClick={() => fileRef.current?.click()}
-                    className="absolute top-2 right-2 bg-white/90 rounded-full px-2.5 py-1
-                      text-[11px] font-medium text-gray-600 flex items-center gap-1 shadow">
-                    <RefreshCw size={10} />교체
-                  </button>
-                )}
+          {!(analyzing && !uploading) && (
+            <>
+              {/* 시간 선택 */}
+              <div className="flex items-center gap-2 bg-white/70 rounded-xl px-3 py-2">
+                <Clock size={13} className="text-gray-400 flex-shrink-0" />
+                <span className="text-[12px] text-gray-400 flex-shrink-0">식사 시간</span>
+                <input
+                  type="time"
+                  value={currentTime}
+                  onChange={e => handleTimeChange(e.target.value)}
+                  className="flex-1 text-[13px] font-semibold text-gray-700
+                    bg-transparent outline-none cursor-pointer
+                    [&::-webkit-calendar-picker-indicator]:opacity-50
+                    [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+                />
               </div>
-            ) : (
-              <button type="button" onClick={() => !isLoading && fileRef.current?.click()}
-                disabled={isLoading}
-                className="w-full h-32 rounded-xl border-2 border-dashed border-gray-200
-                  bg-white/70 flex flex-col items-center justify-center gap-2
-                  hover:border-pink-300 hover:bg-pink-50/50
-                  disabled:opacity-50 disabled:cursor-not-allowed transition-all group">
-                {isLoading
-                  ? <Loader2 size={24} className="text-pink-400 animate-spin" />
-                  : <>
-                      <Camera size={24} className="text-gray-300 group-hover:text-pink-400 transition-colors" />
-                      <span className="text-[12px] text-gray-400 group-hover:text-pink-400">사진을 추가하세요</span>
-                      <span className="text-[10px] text-gray-300">최대 10MB</span>
-                    </>
-                }
-              </button>
-            )
-          )}
 
-          {/* 텍스트 모드 */}
-          {inputMode === 'text' && (
-            <div className="space-y-2">
-              <textarea
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                rows={3}
-                maxLength={500}
-                placeholder={`${mealType}에 먹은 음식을 입력하세요\n예) 현미밥 1공기, 된장국, 김치`}
-                disabled={isLoading}
-                className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white
-                  text-[13px] text-gray-700 placeholder-gray-300 outline-none resize-none
-                  focus:border-pink-300 focus:ring-2 focus:ring-pink-100
-                  disabled:opacity-50 transition-all"
-              />
-              <button type="button" onClick={handleAnalyzeText}
-                disabled={!content.trim() || isLoading}
-                className="w-full py-2 rounded-xl bg-pink-500 text-white text-[13px]
-                  font-semibold flex items-center justify-center gap-1.5
-                  hover:bg-pink-600 disabled:opacity-40 transition-all">
-                {analyzing
-                  ? <><Loader2 size={13} className="animate-spin" />분석 중...</>
-                  : <><Sparkles size={13} />AI 칼로리 분석</>}
-              </button>
-            </div>
+              {/* 탭 */}
+              <div className="flex gap-2 p-1 bg-white/70 rounded-xl">
+                <button type="button" onClick={() => setInputMode('photo')}
+                  className={`flex-1 py-1.5 rounded-lg text-[12px] font-semibold transition-all
+                    ${inputMode === 'photo' ? 'bg-white text-pink-600 shadow-sm' : 'text-gray-400'}`}>
+                  📷 사진
+                </button>
+                <button type="button" onClick={() => setInputMode('text')}
+                  className={`flex-1 py-1.5 rounded-lg text-[12px] font-semibold transition-all
+                    ${inputMode === 'text' ? 'bg-white text-pink-600 shadow-sm' : 'text-gray-400'}`}>
+                  ✏️ 직접입력
+                </button>
+              </div>
+
+              {/* 사진 모드 */}
+              {inputMode === 'photo' && (
+                entry.image_url ? (
+                  <div className="relative w-full rounded-xl overflow-hidden">
+                    <div className="relative w-full aspect-[4/3]">
+                      <Image src={entry.image_url} alt={`${mealType} 식단`} fill
+                        className="object-cover" sizes="(max-width: 640px) 100vw, 400px" />
+                      {uploading && (
+                        <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center gap-2">
+                          <Loader2 size={28} className="text-white animate-spin" />
+                          <p className="text-white text-[13px] font-medium">업로드 중...</p>
+                        </div>
+                      )}
+                    </div>
+                    {!uploading && (
+                      <button type="button" onClick={() => fileRef.current?.click()}
+                        className="absolute top-2 right-2 bg-white/90 rounded-full px-2.5 py-1
+                          text-[11px] font-medium text-gray-600 flex items-center gap-1 shadow">
+                        <RefreshCw size={10} />교체
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => !isLoading && fileRef.current?.click()}
+                    disabled={isLoading}
+                    className="w-full h-32 rounded-xl border-2 border-dashed border-gray-200
+                      bg-white/70 flex flex-col items-center justify-center gap-2
+                      hover:border-pink-300 hover:bg-pink-50/50
+                      disabled:opacity-50 disabled:cursor-not-allowed transition-all group">
+                    {uploading
+                      ? <Loader2 size={24} className="text-pink-400 animate-spin" />
+                      : <>
+                          <Camera size={24} className="text-gray-300 group-hover:text-pink-400 transition-colors" />
+                          <span className="text-[12px] text-gray-400 group-hover:text-pink-400">사진을 추가하세요</span>
+                          <span className="text-[10px] text-gray-300">최대 10MB</span>
+                        </>
+                    }
+                  </button>
+                )
+              )}
+
+              {/* 텍스트 모드 */}
+              {inputMode === 'text' && (
+                <div className="space-y-2">
+                  <textarea
+                    value={content}
+                    onChange={(e) => setContent(e.target.value)}
+                    rows={3}
+                    maxLength={500}
+                    placeholder={`${mealType}에 먹은 음식을 입력하세요\n예) 현미밥 1공기, 된장국, 김치`}
+                    disabled={isLoading}
+                    className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white
+                      text-[13px] text-gray-700 placeholder-gray-300 outline-none resize-none
+                      focus:border-pink-300 focus:ring-2 focus:ring-pink-100
+                      disabled:opacity-50 transition-all"
+                  />
+                  <button type="button" onClick={handleAnalyzeText}
+                    disabled={!content.trim() || isLoading}
+                    className="w-full py-2 rounded-xl bg-pink-500 text-white text-[13px]
+                      font-semibold flex items-center justify-center gap-1.5
+                      hover:bg-pink-600 disabled:opacity-40 transition-all">
+                    {analyzing
+                      ? <><Loader2 size={13} className="animate-spin shrink-0" />분석 중...</>
+                      : <><Sparkles size={13} />AI 칼로리 분석</>}
+                  </button>
+                </div>
+              )}
+            </>
           )}
 
           <input ref={fileRef} type="file" accept="image/*" className="hidden"
             onChange={handleFileChange} />
+
+          {analyzing && !uploading && (
+            <MealAnalysisProgressBox key={analyzeUiKey} inputMode={inputMode} />
+          )}
 
           {/* 에러 */}
           {error && (
             <p className="text-[12px] text-rose-500 bg-rose-50 px-3 py-2 rounded-xl">{error}</p>
           )}
 
-          {/* 분석 결과 — 순서: ①칼로리 ②섭취량 ③목표달성 ④매크로 ⑤배지 ⑥음식 ⑦피드백 */}
-          {entry.analysis && (() => {
+          {/* 분석 결과 — 분석 중에는 이전 카드 숨김, 완료 시 전환 */}
+          {entry.analysis && !analyzing && (() => {
             const r = getIntakeRatio(entry)
             const base = baseMealCalories(entry.analysis)
             const scaled = Math.round(base * r)
@@ -433,7 +568,11 @@ function MealCard({ userId, date, mealType, entry, onChange, dayTotalCalories, g
             const suEff = su != null ? su * r : null
             const fiEff = fi * r
             return (
-              <div className="bg-white rounded-xl border border-pink-100 p-3 space-y-4">
+              <div
+                key={entry.analysis.analyzed_at}
+                className="meal-analysis-result-in bg-white rounded-xl border border-pink-100 p-3 space-y-4
+                  shadow-lg shadow-pink-100/35 ring-1 ring-pink-100/70"
+              >
 
                 {/* ① 칼로리 */}
                 <div className="text-center">

@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
 
     await supabase.from('daily_logs').upsert(
       { user_id: user.id, date, meal_image_url: imageUrl, meal_analysis: analysis },
-      { onConflict: 'user_id,date' }
+      { onConflict: 'user_id,date' },
     )
 
     return NextResponse.json(analysis)

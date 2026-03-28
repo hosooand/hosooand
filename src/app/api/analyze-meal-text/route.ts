@@ -20,12 +20,9 @@ import { normalizeMealAnalysis } from '@/lib/meal-analysis-normalize'
  */
 
 const ROUTE = '[analyze-meal-text]'
-// gemini-2.5-flash: 최신 운영 기본 모델로 사용합니다.
 const DEFAULT_MODEL = 'gemini-2.5-flash'
 const ENV_MODEL = process.env.GEMINI_MODEL
 
-// `gemini-flash-lite-latest`는 Gemini API에서 모델 ID로 문서에서 확인되지 않아,
-// 실서비스에서 실수로 넣었을 때도 동작하도록 Gemini API 공식 모델로 매핑합니다.
 const MODEL =
   ENV_MODEL === 'gemini-flash-lite-latest' ? DEFAULT_MODEL : ENV_MODEL ?? DEFAULT_MODEL
 
@@ -42,7 +39,6 @@ type ErrorBody = {
     code?: string
     details?: string
     hint?: string
-    /** 개발 환경에서만 포함 */
     stack?: string
   }
 }
@@ -75,11 +71,6 @@ function jsonError(status: number, err: unknown, step: string) {
   })
 }
 
-/**
- * Gemini 응답에서 순수 JSON 객체 문자열만 추출
- * - ```json ... ``` fenced block 우선
- * - 실패 시 첫 '{' ~ 마지막 '}' 범위 사용
- */
 function extractJsonOnly(raw: string): string {
   const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)
   if (fenced?.[1]) return fenced[1].trim()
@@ -159,7 +150,6 @@ export async function POST(req: NextRequest) {
     const model = genAI.getGenerativeModel({
       model: MODEL,
       generationConfig: {
-        // 가능한 한 순수 JSON만 받도록 (SDK/모델이 지원하는 경우)
         responseMimeType: 'application/json',
       },
     })
@@ -220,11 +210,15 @@ export async function POST(req: NextRequest) {
     } catch (e) {
       console.error(`${ROUTE} STEP 10: JSON.parse 실패`, e)
       console.error(`${ROUTE} STEP 10: parse 대상 전체:\n`, cleaned)
-      return jsonError(422, {
-        message: '모델 응답을 JSON으로 파싱할 수 없습니다',
-        code: 'JSON_PARSE',
-        details: cleaned.slice(0, 500),
-      }, lastStep)
+      return jsonError(
+        422,
+        {
+          message: '모델 응답을 JSON으로 파싱할 수 없습니다',
+          code: 'JSON_PARSE',
+          details: cleaned.slice(0, 500),
+        },
+        lastStep,
+      )
     }
 
     lastStep = 'STEP 10b: normalizeMealAnalysis'
