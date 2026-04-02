@@ -23,7 +23,7 @@ export default async function AdminUsersPage() {
     .eq('id', user.id)
     .single()
 
-  if (me?.role !== 'admin') redirect('/dashboard')
+  if (me?.role !== 'admin') redirect('/select-service')
 
   // 미승인 staff 목록 — service role로 조회 (RLS가 타인 프로필 SELECT를 막는 경우 대비)
   const adminSb = createAdminClient()

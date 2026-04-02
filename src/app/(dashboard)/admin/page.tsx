@@ -38,7 +38,7 @@ export default async function AdminPage() {
 
   const allowed =
     profile?.role === 'admin' || (profile?.role === 'staff' && profile?.is_approved === true)
-  if (!allowed) redirect('/dashboard')
+  if (!allowed) redirect('/select-service')
 
   const { data: members, error: membersError } = await supabase
     .from('profiles')

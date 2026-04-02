@@ -3,6 +3,7 @@ const CACHE_NAME = 's-body-v1'
 // 오프라인에서도 보여줄 핵심 리소스
 const STATIC_ASSETS = [
   '/',
+  '/select-service',
   '/dashboard',
   '/offline',
   '/icons/icon-192.png',

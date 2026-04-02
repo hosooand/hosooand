@@ -776,12 +776,62 @@ export default function AdminClient({ members: initialMembers, staffId, initialN
                           <span className="text-[16px]">{['😵','😔','😐','🙂','😄'][log.condition - 1]}</span>
                         </div>
                       )}
-                      {log.meal_analysis?.feedback && (
-                        <div className="mt-2 bg-pink-50 rounded-[8px] p-2.5 border border-pink-100">
-                          <p className="text-[11px] font-semibold text-pink-500 mb-1">💬 AI 식단 피드백</p>
-                          <p className="text-[12px] text-gray-600 leading-relaxed">{log.meal_analysis.feedback}</p>
-                        </div>
-                      )}
+                      {/* 식사별 기록 */}
+                      {(() => {
+                        const entries = (log as unknown as Record<string, unknown>).meal_entries as
+                          | { meal_type: string; image_url?: string | null; content?: string | null; calories?: number | null }[]
+                          | undefined
+                        if (!Array.isArray(entries) || entries.length === 0) return null
+                        return (
+                          <div className="mt-2 space-y-2.5">
+                            {entries.map((entry, idx) => (
+                              <div key={idx} style={{
+                                backgroundColor: '#ffffff',
+                                borderRadius: 16,
+                                border: '1px solid #fce7f3',
+                                padding: 14,
+                              }}>
+                                <span style={{
+                                  display: 'inline-block',
+                                  padding: '3px 10px',
+                                  borderRadius: 20,
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  backgroundColor: '#fdf2f8',
+                                  color: '#ec4899',
+                                  marginBottom: 8,
+                                }}>
+                                  {entry.meal_type}
+                                </span>
+                                {entry.image_url && (
+                                  <img
+                                    src={entry.image_url}
+                                    alt={entry.meal_type}
+                                    style={{
+                                      width: '100%',
+                                      maxHeight: 160,
+                                      objectFit: 'cover',
+                                      borderRadius: 12,
+                                      display: 'block',
+                                      marginBottom: 8,
+                                    }}
+                                  />
+                                )}
+                                {entry.content && (
+                                  <p style={{ fontSize: 14, color: '#334155', margin: 0, marginBottom: 4 }}>
+                                    {entry.content}
+                                  </p>
+                                )}
+                                {entry.calories != null && entry.calories > 0 && (
+                                  <p style={{ fontSize: 13, color: '#f472b6', fontWeight: 600, margin: 0 }}>
+                                    {Math.round(entry.calories)} kcal
+                                  </p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )
+                      })()}
                       {log.memo && (
                         <div className="mt-2 bg-gray-50 rounded-[8px] p-2.5">
                           <p className="text-[12px] text-gray-500">📝 {log.memo}</p>

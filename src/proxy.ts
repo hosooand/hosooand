@@ -43,7 +43,7 @@ export default async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
   if (user && (path === '/login' || path === '/signup')) {
-    return NextResponse.redirect(new URL('/dashboard', request.url))
+    return NextResponse.redirect(new URL('/select-service', request.url))
   }
 
   // staff 미승인 시 로그인으로 리다이렉트 (승인 후에만 대시보드 등 이용 가능)
@@ -58,9 +58,9 @@ export default async function proxy(request: NextRequest) {
     }
   }
 
-  // 채팅 기능 폐기 — /chat 접근 시 대시보드로 리다이렉트
+  // 채팅 기능 폐기 — /chat 접근 시 서비스 선택으로 리다이렉트
   if (path.startsWith('/chat')) {
-    return NextResponse.redirect(new URL('/dashboard', request.url))
+    return NextResponse.redirect(new URL('/select-service', request.url))
   }
 
   // /admin 접근: admin 또는 승인된 staff만 허용 (/admin/users는 아래에서 admin만 허용)
@@ -85,7 +85,7 @@ export default async function proxy(request: NextRequest) {
     })
 
     if (!allowed) {
-      return NextResponse.redirect(new URL('/dashboard', request.url))
+      return NextResponse.redirect(new URL('/select-service', request.url))
     }
   }
 
@@ -105,7 +105,7 @@ export default async function proxy(request: NextRequest) {
     })
 
     if (profile?.role !== 'admin') {
-      return NextResponse.redirect(new URL('/dashboard', request.url))
+      return NextResponse.redirect(new URL('/select-service', request.url))
     }
   }
 

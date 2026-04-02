@@ -6,7 +6,7 @@
   "background_color": "#FFF8FB",
   "display": "standalone",
   "orientation": "portrait",
-  "start_url": "/dashboard",
+  "start_url": "/select-service",
   "scope": "/",
   "lang": "ko",
   "icons": [
