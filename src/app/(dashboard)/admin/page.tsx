@@ -1,5 +1,5 @@
-import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import { getDashboardSession } from '@/lib/auth/session-profile'
 import AdminClient from './_components/AdminClient'
 import { mealEntriesHasRecords } from '@/lib/meal-entries'
 
@@ -26,19 +26,12 @@ interface Member {
 }
 
 export default async function AdminPage() {
-  const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const { user, profile, supabase } = await getDashboardSession()
   if (!user) redirect('/login')
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role, is_approved, id, name')
-    .eq('id', user.id)
-    .single()
 
   const allowed =
     profile?.role === 'admin' || (profile?.role === 'staff' && profile?.is_approved === true)
-  if (!allowed) redirect('/select-service')
+  if (!allowed || !profile) redirect('/select-service')
 
   const { data: members, error: membersError } = await supabase
     .from('profiles')
@@ -98,7 +91,7 @@ export default async function AdminPage() {
       members={membersWithMealFlag}
       staffId={profile.id}
       initialNotes={notes}
-      viewerRole={profile.role}
+      viewerRole={profile.role ?? undefined}
     />
   )
 }

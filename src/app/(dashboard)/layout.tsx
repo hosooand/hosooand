@@ -1,21 +1,15 @@
 import type { ReactNode } from 'react'
-import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import { getDashboardSession } from '@/lib/auth/session-profile'
 import DashboardShell from './_components/DashboardShell'
 import NavWrapper from '@/components/shared/NavWrapper'
 
 export default async function DashboardLayout({ children }: { children: ReactNode }) {
-  const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const { user, profile } = await getDashboardSession()
   if (!user) redirect('/login')
-
-  const { data: profile, error: profileError } = await supabase
-    .from('profiles')
-    .select('name, avatar, role, is_approved')
-    .eq('id', user.id)
-    .single()
-
-  console.log('[dashboard layout] profile', { profile, profileError: profileError?.message, userId: user.id })
+  if (profile?.role === 'staff' && profile.is_approved !== true) {
+    redirect('/login')
+  }
 
   const showAdminNav =
     profile?.role === 'admin' || (profile?.role === 'staff' && profile?.is_approved === true)

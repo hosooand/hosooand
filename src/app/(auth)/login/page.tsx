@@ -43,7 +43,7 @@ export default function LoginPage() {
       setLoading(false)
       return
     }
-    router.push('/select-service')
+    router.replace('/select-service')
     router.refresh()
   }
 
@@ -141,11 +141,16 @@ export default function LoginPage() {
             active:translate-y-0 disabled:opacity-60 disabled:cursor-not-allowed
             transition-all duration-200 flex items-center justify-center">
           {loading ? (
-            <svg className="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
-              <circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.3)" strokeWidth="3" />
-              <path d="M12 2a10 10 0 0 1 10 10" stroke="white" strokeWidth="3" strokeLinecap="round" />
-            </svg>
-          ) : '로그인'}
+            <span className="flex items-center gap-2">
+              <svg className="animate-spin w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" aria-hidden>
+                <circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.3)" strokeWidth="3" />
+                <path d="M12 2a10 10 0 0 1 10 10" stroke="white" strokeWidth="3" strokeLinecap="round" />
+              </svg>
+              로그인 중...
+            </span>
+          ) : (
+            '로그인'
+          )}
         </button>
       </form>
 

@@ -39,3 +39,13 @@ body {
 .meal-analysis-result-in {
   animation: mealResultIn 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.select-service-route-spinner {
+  animation: spin 0.8s linear infinite;
+}
