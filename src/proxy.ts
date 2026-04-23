@@ -42,11 +42,10 @@ export default async function proxy(request: NextRequest) {
   if (!user && !isPublic) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
-  if (user && (path === '/login' || path === '/signup')) {
+  if (user && (path === '/' || path === '/login' || path === '/signup')) {
     return NextResponse.redirect(new URL('/select-service', request.url))
   }
 
-  // 채팅 기능 폐기 — /chat 접근 시 서비스 선택으로 리다이렉트
   if (path.startsWith('/chat')) {
     return NextResponse.redirect(new URL('/select-service', request.url))
   }
