@@ -7,8 +7,6 @@ export type SessionProfileRow = {
   avatar: string | null
   role: string | null
   is_approved: boolean | null
-  target_weight: number | null
-  target_calories: number | null
 }
 
 /**

@@ -44,7 +44,6 @@ export default function LoginPage() {
       return
     }
     router.replace('/select-service')
-    router.refresh()
   }
 
 

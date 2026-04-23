@@ -15,18 +15,29 @@ export default async function DiaryPage({ searchParams }: Props) {
 
   const date = params.date ?? new Date().toLocaleDateString('en-CA')
 
-  const { data: log } = await supabase
-    .from('daily_logs')
-    .select('*')
-    .eq('user_id', user.id)
-    .eq('date', date)
-    .single()
+  const [{ data: log }, { data: targets }] = await Promise.all([
+    supabase
+      .from('daily_logs')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('date', date)
+      .single(),
+    supabase
+      .from('profiles')
+      .select('target_weight, target_calories')
+      .eq('id', user.id)
+      .single(),
+  ])
 
   return (
     <DiaryClient
       date={date}
       initialLog={log ?? null}
-      profile={profile ?? { name: '', target_weight: null, target_calories: null }}
+      profile={{
+        name: profile?.name ?? '',
+        target_weight: targets?.target_weight ?? null,
+        target_calories: targets?.target_calories ?? null,
+      }}
       userId={user.id}
     />
   )

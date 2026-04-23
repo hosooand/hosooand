@@ -26,11 +26,6 @@ const ENV_MODEL = process.env.GEMINI_MODEL
 const MODEL =
   ENV_MODEL === 'gemini-flash-lite-latest' ? DEFAULT_MODEL : ENV_MODEL ?? DEFAULT_MODEL
 
-function log(step: string, detail?: unknown) {
-  if (detail !== undefined) console.log(`${ROUTE} ${step}`, detail)
-  else console.log(`${ROUTE} ${step}`)
-}
-
 type ErrorBody = {
   ok: false
   error: {
@@ -88,27 +83,22 @@ export async function POST(req: NextRequest) {
 
   try {
     lastStep = 'STEP 1: createServerSupabaseClient'
-    log(lastStep)
     const supabase = await createServerSupabaseClient()
 
     lastStep = 'STEP 2: supabase.auth.getUser()'
-    log(lastStep)
     const {
       data: { user },
       error: authError,
     } = await supabase.auth.getUser()
     if (authError) console.error(`${ROUTE} STEP 2: auth error`, authError)
     if (!user) {
-      log('STEP 2: no user → 401')
       return NextResponse.json(
         { ok: false, error: { message: '인증 필요', step: 'STEP 2' } },
         { status: 401 },
       )
     }
-    log('STEP 2: user ok', { userId: user.id })
 
     lastStep = 'STEP 3: req.json()'
-    log(lastStep)
     let body: { text?: string; date?: string }
     try {
       body = await req.json()
@@ -118,24 +108,20 @@ export async function POST(req: NextRequest) {
     }
     const { text, date } = body
     if (!text) {
-      log('STEP 3: missing text → 400')
       return NextResponse.json(
         { ok: false, error: { message: 'text 필요', step: 'STEP 3' } },
         { status: 400 },
       )
     }
     if (!date) {
-      log('STEP 3: missing date → 400')
       return NextResponse.json(
         { ok: false, error: { message: 'date 필요', step: 'STEP 3' } },
         { status: 400 },
       )
     }
-    log('STEP 3: body ok', { date, textPreview: String(text).slice(0, 80) })
 
     lastStep = 'STEP 4: GEMINI_API_KEY'
     const key = process.env.GEMINI_API_KEY
-    log(lastStep, { defined: Boolean(key), length: key?.length ?? 0 })
     if (!key) {
       return jsonError(
         500,
@@ -145,7 +131,6 @@ export async function POST(req: NextRequest) {
     }
 
     lastStep = 'STEP 5: GoogleGenerativeAI + model'
-    log(lastStep, { requestedModel: ENV_MODEL ?? null, model: MODEL })
     const genAI = new GoogleGenerativeAI(key)
     const model = genAI.getGenerativeModel({
       model: MODEL,
@@ -168,24 +153,12 @@ export async function POST(req: NextRequest) {
 - analyzed_at: "${new Date().toISOString()}" 형식 ISO 문자열`
 
     lastStep = 'STEP 6: model.generateContent()'
-    log(`${lastStep} 호출 시작`)
     let result: Awaited<ReturnType<typeof model.generateContent>>
     try {
       result = await model.generateContent(prompt)
     } catch (e) {
       console.error(`${ROUTE} STEP 6: generateContent() 예외`, e)
       return jsonError(502, e, lastStep)
-    }
-    log('STEP 6: model.generateContent() 완료')
-
-    lastStep = 'STEP 7: candidates'
-    try {
-      const candidates = result.response.candidates
-      log('STEP 7: Gemini candidates (raw)', JSON.stringify(candidates, null, 2))
-      const fr = candidates?.[0]?.finishReason
-      if (fr) log('STEP 7: finishReason', fr)
-    } catch (e) {
-      console.error(`${ROUTE} STEP 7: candidates 직렬화 실패`, e)
     }
 
     lastStep = 'STEP 8: response.text()'
@@ -197,11 +170,8 @@ export async function POST(req: NextRequest) {
       return jsonError(502, e, lastStep)
     }
 
-    console.log(`${ROUTE} STEP 8: Gemini Raw Response (가공 전 전체 문자열):\n`, rawText)
-
     lastStep = 'STEP 9: extractJsonOnly'
     const cleaned = extractJsonOnly(rawText)
-    log('STEP 9: JSON 추출 후 (parse 직전, 앞 800자)', cleaned.slice(0, 800))
 
     lastStep = 'STEP 10: JSON.parse'
     let analysis: unknown
@@ -225,7 +195,6 @@ export async function POST(req: NextRequest) {
     const normalized = normalizeMealAnalysis(analysis as Record<string, unknown>)
 
     lastStep = 'STEP 11: daily_logs upsert'
-    log(lastStep)
     const { error: upsertError } = await supabase.from('daily_logs').upsert(
       { user_id: user.id, date, meal_analysis: normalized },
       { onConflict: 'user_id,date' },
@@ -236,7 +205,6 @@ export async function POST(req: NextRequest) {
     }
 
     lastStep = 'STEP 12: success'
-    log(`${lastStep} → 200`)
     return NextResponse.json(normalized, {
       headers: { 'Content-Type': 'application/json; charset=utf-8' },
     })

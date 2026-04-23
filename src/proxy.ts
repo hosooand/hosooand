@@ -50,8 +50,6 @@ export default async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL('/select-service', request.url))
   }
 
-  // role·is_approved는 middleware에서 DB 조회하지 않음 → 대시보드 layout·각 admin 페이지에서 검증
-
   return supabaseResponse
 }
 
