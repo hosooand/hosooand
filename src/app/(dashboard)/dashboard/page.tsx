@@ -1,31 +1,24 @@
-import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { getDashboardSession } from '@/lib/auth/session-profile'
+import { redirect } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
 import DashboardCharts from './_components/DashboardCharts'
 import ClinicStatus from './_components/ClinicStatus'
 
 export default async function DashboardPage() {
-  const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const { user, profile, supabase } = await getDashboardSession()
+  if (!user) redirect('/login')
 
   const from = new Date()
   from.setDate(from.getDate() - 30)
   const fromStr = from.toISOString().split('T')[0]
 
-  // profile + logs는 서로 독립이므로 병렬 실행
-  const [{ data: profile }, { data: logs }] = await Promise.all([
-    supabase
-      .from('profiles')
-      .select('name')
-      .eq('id', user!.id)
-      .single(),
-    supabase
-      .from('daily_logs')
-      .select('date, meal_analysis, water_intake, sleep_hours, condition, exercise_logs')
-      .eq('user_id', user!.id)
-      .gte('date', fromStr)
-      .order('date', { ascending: true }),
-  ])
+  const { data: logs } = await supabase
+    .from('daily_logs')
+    .select('date, meal_analysis, water_intake, sleep_hours, condition, exercise_logs')
+    .eq('user_id', user.id)
+    .gte('date', fromStr)
+    .order('date', { ascending: true })
 
   return (
     <div className="max-w-2xl mx-auto px-4 pt-6 pb-8">

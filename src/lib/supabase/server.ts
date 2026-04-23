@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { cache } from 'react'
 
 export async function createServerSupabaseClient() {
   const cookieStore = await cookies()
@@ -25,3 +26,21 @@ export async function createServerSupabaseClient() {
     },
   )
 }
+
+/**
+ * 같은 요청(렌더링 사이클) 내에서 auth + profile을 1번만 조회.
+ * layout → page 간 중복 왕복을 제거한다.
+ */
+export const getAuthProfile = cache(async () => {
+  const supabase = await createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { user: null, profile: null, supabase }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('id, name, avatar, role, is_approved, target_weight, target_calories')
+    .eq('id', user.id)
+    .single()
+
+  return { user, profile, supabase }
+})
