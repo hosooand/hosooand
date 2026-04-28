@@ -24,6 +24,14 @@ const nextConfig: NextConfig = {
       ],
     },
     {
+      // HTML 페이지에만 no-cache 적용 (즐겨찾기 진입 시 stale chunk 참조 방지)
+      // _next/static, 이미지·폰트 등 content-hashed 정적 자산은 제외 → 캐시 유지
+      source: '/((?!_next/static|_next/image|favicon\\.ico|sw\\.js|icons/|manifest\\.json|.*\\.(?:svg|png|jpg|jpeg|gif|webp|js|css|woff|woff2|ttf|ico|json)$).*)',
+      headers: [
+        { key: 'Cache-Control', value: 'no-cache, no-store, must-revalidate' },
+      ],
+    },
+    {
       // 서비스 워커 캐시 방지
       source: '/sw.js',
       headers: [
