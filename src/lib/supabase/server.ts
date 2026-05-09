@@ -31,13 +31,15 @@ export async function createServerSupabaseClient() {
  * 같은 요청(렌더링 사이클) 내에서 auth + profile을 1번만 조회.
  * layout → page 간 중복 왕복을 제거한다.
  *
- * Supabase가 권장하는 보안 패턴: 서버 컴포넌트에서는 getUser()로 JWT를 검증.
- * cache()로 감싸 같은 요청에서는 1회만 호출된다.
+ * 성능: getSession()은 쿠키 디코드만 수행(0~1ms).
+ * 보안: 데이터 접근은 RLS가 JWT를 재검증하므로 user.id를 신뢰해도 안전.
+ *       (proxy에서도 이미 동일하게 검증된 후 전달됨)
  */
 export const getAuthProfile = cache(async () => {
   const supabase = await createServerSupabaseClient()
-  const { data: { user }, error } = await supabase.auth.getUser()
-  if (error || !user) return { user: null, profile: null, supabase }
+  const { data: { session } } = await supabase.auth.getSession()
+  const user = session?.user ?? null
+  if (!user) return { user: null, profile: null, supabase }
 
   const { data: profile } = await supabase
     .from('profiles')

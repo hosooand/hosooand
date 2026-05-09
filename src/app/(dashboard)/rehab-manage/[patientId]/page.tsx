@@ -28,19 +28,21 @@ export default async function PatientDetailPage({ params }: Props) {
   const { patientId } = await params;
   const { supabase } = await requireStaff();
 
-  const { data: patient } = await supabase
-    .from("profiles")
-    .select("id, name, member_number, role")
-    .eq("id", patientId)
-    .single();
-
-  if (!patient) redirect("/rehab-manage");
-
-  const [presRes, bundleRes, imgRes] = await Promise.allSettled([
+  // patient + 3개 번들을 모두 병렬 호출
+  const [patientRes, presRes, bundleRes, imgRes] = await Promise.allSettled([
+    supabase
+      .from("profiles")
+      .select("id, name, member_number, role")
+      .eq("id", patientId)
+      .single(),
     getPrescriptionByPatient(patientId),
     getPatientDetailExerciseBundle(patientId),
     getMedicalImages(patientId, { limit: 5 }),
   ]);
+
+  const patient =
+    patientRes.status === "fulfilled" ? patientRes.value.data : null;
+  if (!patient) redirect("/rehab-manage");
 
   const prescription =
     presRes.status === "fulfilled" ? presRes.value : null;

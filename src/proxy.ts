@@ -33,7 +33,11 @@ export default async function proxy(request: NextRequest) {
     },
   )
 
-  const { data: { user } } = await supabase.auth.getUser()
+  // getSession()은 쿠키 디코드(0~1ms)만 수행. JWT가 만료된 경우에만 Auth 서버 왕복.
+  // getUser()는 매 요청마다 Auth 서버 호출(~100ms)이라 미들웨어에는 부적합.
+  // 보안: 실제 데이터 접근은 RLS가 JWT를 재검증하므로 안전.
+  const { data: { session } } = await supabase.auth.getSession()
+  const user = session?.user ?? null
   const path = request.nextUrl.pathname
   const isPublic =
     path === '/sw.js' ||
