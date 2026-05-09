@@ -38,13 +38,23 @@ export default function AvatarPicker({ currentAvatar, userId }: Props) {
       <button
         type="button"
         onClick={() => setOpen(p => !p)}
-        className="w-9 h-9 rounded-full overflow-hidden border-2 border-pink-200
-          hover:border-pink-400 transition-all relative">
+        className="transition-all hover:opacity-80"
+        style={{
+          width: 36,
+          height: 36,
+          borderRadius: '50%',
+          backgroundColor: '#e0f2fe',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          overflow: 'hidden',
+        }}>
         <Image
           src={current.src}
           alt={current.label}
-          fill
-          className="object-cover"
+          width={32}
+          height={32}
+          style={{ objectFit: 'contain' }}
         />
       </button>
 
