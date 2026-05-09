@@ -70,7 +70,18 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
         {/* 모바일 로고 */}
         <div className="lg:hidden flex flex-col items-center mb-8 gap-3">
           <Image src="/duck.png" alt="통통이" width={60} height={60} className="object-contain" />
-          <Image src="/logo.png" alt="S Body clinic" width={140} height={45} className="object-contain" />
+          <Image
+            src="/logo.png"
+            alt="S Body clinic"
+            width={140}
+            height={45}
+            className="object-contain"
+            style={{
+              borderRadius: 12,
+              backgroundColor: '#ffffff',
+              padding: 8,
+            }}
+          />
         </div>
 
         {children}
