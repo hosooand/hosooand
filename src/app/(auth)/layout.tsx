@@ -3,7 +3,10 @@ import Image from 'next/image'
 
 export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-h-screen bg-white">
+    <div
+      className="flex min-h-screen bg-white"
+      style={{ backgroundColor: '#ffffff', colorScheme: 'light' }}
+    >
 
       {/* 왼쪽 데코 패널 */}
       <div className="hidden lg:flex flex-col justify-between flex-shrink-0 w-[480px]
@@ -59,8 +62,11 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
       </div>
 
       {/* 오른쪽 폼 영역 */}
-      <div className="flex-1 flex flex-col items-center justify-center overflow-y-auto
-        bg-white relative px-6 py-10">
+      <div
+        className="flex-1 flex flex-col items-center justify-center overflow-y-auto
+        bg-white relative px-6 py-10"
+        style={{ backgroundColor: '#ffffff' }}
+      >
 
         <div className="lg:hidden absolute -top-20 -right-16 w-72 h-72 rounded-full
           bg-pink-300/15 blur-[60px] pointer-events-none" />
@@ -70,18 +76,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
         {/* 모바일 로고 */}
         <div className="lg:hidden flex flex-col items-center mb-8 gap-3">
           <Image src="/duck.png" alt="통통이" width={60} height={60} className="object-contain" />
-          <Image
-            src="/logo.png"
-            alt="S Body clinic"
-            width={140}
-            height={45}
-            className="object-contain"
-            style={{
-              borderRadius: 12,
-              backgroundColor: '#ffffff',
-              padding: 8,
-            }}
-          />
+          <Image src="/logo.png" alt="S Body clinic" width={140} height={45} className="object-contain" />
         </div>
 
         {children}
