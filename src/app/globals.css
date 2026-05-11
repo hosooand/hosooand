@@ -4,6 +4,11 @@ html {
   color-scheme: light only !important;
 }
 
+html, body, * {
+  forced-color-adjust: none !important;
+  -webkit-text-fill-color: inherit !important;
+}
+
 :root {
   --background: #ffffff;
   --foreground: #171717;

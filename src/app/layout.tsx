@@ -33,6 +33,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="ko" style={{ colorScheme: 'light' }}>
       <head>
+        <meta name="color-scheme"                 content="light only" />
+        <meta name="supported-color-schemes"      content="light only" />
         <meta name="mobile-web-app-capable"       content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -40,7 +42,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="format-detection"             content="telephone=no" />
         <link rel="apple-touch-icon" href="/icons/icon-192.png" />
       </head>
-      <body className={`${geist.variable} antialiased`}>
+      <body
+        className={`${geist.variable} antialiased`}
+        style={{ backgroundColor: '#ffffff', color: '#000000' }}
+      >
       <ServiceWorkerRegister />
        {children}
       </body>
