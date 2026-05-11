@@ -31,7 +31,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ko">
+    <html lang="ko" style={{ colorScheme: 'light' }}>
       <head>
         <meta name="mobile-web-app-capable"       content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
