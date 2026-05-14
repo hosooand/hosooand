@@ -48,8 +48,16 @@ export async function upsertDailyLog(
   const { meal_entries, ...rest } = values as typeof values & { meal_entries?: unknown }
   const mealEntriesIsArray = Array.isArray(meal_entries)
 
+  // 날짜는 절대 new Date() 로 재변환하지 않는다 — "YYYY-MM-DD" 문자열 그대로.
+  const dateStr = values.date
+  const dateIsValidFormat = /^\d{4}-\d{2}-\d{2}$/.test(dateStr)
+
   console.log('[upsertDailyLog] before upsert', {
-    date: values.date,
+    date: dateStr,
+    dateType: typeof dateStr,
+    dateIsValidFormat,
+    kstToday: new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' }),
+    utcToday: new Date().toISOString().split('T')[0],
     meal_entries_present: meal_entries !== undefined,
     meal_entries_type: meal_entries == null ? String(meal_entries) : typeof meal_entries,
     meal_entries_is_array: mealEntriesIsArray,
@@ -58,6 +66,7 @@ export async function upsertDailyLog(
 
   const payload = {
     ...rest,
+    date: dateStr,
     meal_entries: meal_entries ?? [],
     user_id: user.id,
   }
@@ -72,7 +81,13 @@ export async function upsertDailyLog(
     .single()
 
   if (error) {
-    console.error('[upsertDailyLog] upsert error', { message: error.message, details: error })
+    console.error('[upsertDailyLog] upsert error', {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+      payload_date: dateStr,
+    })
     throw new Error(error.message)
   }
 

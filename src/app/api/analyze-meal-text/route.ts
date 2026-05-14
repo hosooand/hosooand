@@ -107,6 +107,17 @@ export async function POST(req: NextRequest) {
       return jsonError(400, e, 'STEP 3: req.json()')
     }
     const { text, date } = body
+    console.log(`${ROUTE} STEP 3: 요청 date`, {
+      date,
+      dateType: typeof date,
+      dateIsValidFormat: typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date),
+    })
+    if (!date || typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return NextResponse.json(
+        { ok: false, error: { message: 'date(YYYY-MM-DD) 필요', step: 'STEP 3' } },
+        { status: 400 },
+      )
+    }
     if (!text) {
       return NextResponse.json(
         { ok: false, error: { message: 'text 필요', step: 'STEP 3' } },

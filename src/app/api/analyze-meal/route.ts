@@ -12,7 +12,15 @@ export async function POST(req: NextRequest) {
     if (!user) return NextResponse.json({ error: '인증 필요' }, { status: 401 })
 
     const { imageUrl, date } = await req.json()
+    console.log('[analyze-meal] 요청 date', {
+      date,
+      dateType: typeof date,
+      dateIsValidFormat: typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date),
+    })
     if (!imageUrl) return NextResponse.json({ error: 'imageUrl 필요' }, { status: 400 })
+    if (!date || typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return NextResponse.json({ error: 'date(YYYY-MM-DD) 필요' }, { status: 400 })
+    }
 
     const imgRes = await fetch(imageUrl)
     const contentType = imgRes.headers.get('content-type') ?? 'image/jpeg'

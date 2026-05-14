@@ -485,9 +485,24 @@ export async function createExerciseLog(input: CreateExerciseLogInput) {
     const painLevel = input.pain_level;
     const exerciseCount = input.exercise_count;
 
-    const date =
-      input.performed_at?.trim() || new Date().toISOString().split("T")[0];
-    const performedAt = new Date(date).toISOString().split("T")[0];
+    // 날짜는 절대 Date 객체로 재변환하지 않는다 (timezone shift 방지).
+    // 클라이언트가 "YYYY-MM-DD" 문자열로 보낸 그대로 저장.
+    // 미전달 시 KST 기준 오늘 (서버가 UTC 라도 timezone 옵션으로 보정).
+    const raw = input.performed_at?.trim();
+    const performedAt = raw && /^\d{4}-\d{2}-\d{2}$/.test(raw)
+      ? raw
+      : new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+
+    console.log("[createExerciseLog] 호출", {
+      patientId,
+      exerciseId,
+      prescriptionId,
+      rawPerformedAt: input.performed_at,
+      typeofPerformedAt: typeof input.performed_at,
+      performedAt,
+      painLevel,
+      exerciseCount,
+    });
 
     const { data, error } = await supabase
       .from("exercise_logs")
@@ -509,7 +524,18 @@ export async function createExerciseLog(input: CreateExerciseLogInput) {
       .select("*, exercise:exercises(*, body_part:body_parts(*))")
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error("[createExerciseLog] supabase 에러", {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+        performedAt,
+        patientId,
+        exerciseId,
+      });
+      throw error;
+    }
     return data;
   });
 }
