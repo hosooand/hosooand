@@ -9,7 +9,7 @@ export interface SelectServiceProfile {
   role: string;
 }
 
-const REHAB_COMING_SOON = true;
+const REHAB_COMING_SOON = false;
 
 export default function SelectServiceClient({ profile }: { profile: SelectServiceProfile }) {
   const router = useRouter();
