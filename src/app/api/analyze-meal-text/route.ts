@@ -154,13 +154,28 @@ export async function POST(req: NextRequest) {
 
 식단: ${text}
 
-반환 JSON 필드:
+## 사용자 정보
+- 이 사용자의 하루 권장 칼로리는 1100kcal입니다.
+- 사용자는 다이어트 중입니다.
+
+## 피드백(feedback) 작성 규칙 — 반드시 지킬 것
+1. 절대로 "더 드세요", "부족합니다", "더 섭취하세요", "양이 적습니다", "충분히 드세요" 같은 표현을 사용하지 마세요.
+2. 칼로리가 낮은 식사에 대해서는 긍정적으로 반응하세요.
+   - 예: "가볍게 드셨네요! 좋은 선택입니다."
+   - 예: "칼로리를 잘 조절하고 계시네요."
+   - 예: "다이어트에 도움이 되는 식사예요."
+3. 영양 균형에 대한 조언은 하되, 더 먹으라는 표현은 절대 하지 마세요.
+   (대안 예: "다음 식사에 단백질을 보강하면 좋아요" → 양은 그대로 유지)
+4. 나트륨(sodium_mg)이 700mg 이상이거나 당류(sugar_g)가 15g 이상이면 경고 문구를 포함하세요.
+5. 톤은 따뜻하고 격려하는 다이어트 코치 스타일.
+
+## 반환 JSON 필드
 - calories: 전체 kcal (foods의 calories 합과 일치)
 - carbs, protein, fat, fiber: 그램(g)
 - sodium_mg: 추정 나트륨 (mg)
 - sugar_g: 추정 당류 (g)
 - foods: [{name, amount, calories}]
-- feedback: 한국어 2문장 (평가 + 조언)
+- feedback: 한국어 2문장. 위 피드백 규칙을 반드시 따를 것.
 - analyzed_at: "${new Date().toISOString()}" 형식 ISO 문자열`
 
     lastStep = 'STEP 6: model.generateContent()'
