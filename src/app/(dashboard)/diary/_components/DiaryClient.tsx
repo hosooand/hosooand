@@ -87,9 +87,10 @@ export default function DiaryClient({ date, initialLog, profile, userId }: Props
   const router                       = useRouter()
   const [isPending, startTransition] = useTransition()
   const [mealEntries, setMealEntries] = useState<MealPanelEntry[]>(() => extractMealEntries(initialLog))
+  const [mealEntriesDirty, setMealEntriesDirty] = useState(false)
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
 
-  const { register, handleSubmit, watch, setValue, reset, formState: { errors } } =
+  const { register, handleSubmit, watch, setValue, reset, formState: { errors, isDirty } } =
     useForm<DailyLogFormValues>({
       resolver: zodResolver(DailyLogSchema),
       defaultValues: {
@@ -104,9 +105,13 @@ export default function DiaryClient({ date, initialLog, profile, userId }: Props
       },
     })
 
+  // form 의 isDirty + mealEntries 변경 합쳐서 "미저장" 여부 판단
+  const hasUnsavedChanges = isDirty || mealEntriesDirty
+
   // date가 바뀌면 → 상태 즉시 초기화 → 새 날짜 데이터로 교체
   useEffect(() => {
     setMealEntries(extractMealEntries(initialLog))
+    setMealEntriesDirty(false)
     reset({
       date,
       meal_image_url: initialLog?.meal_image_url ?? null,
@@ -119,12 +124,25 @@ export default function DiaryClient({ date, initialLog, profile, userId }: Props
     })
   }, [date, initialLog, reset])
 
+  // 미저장 상태일 때 브라우저 새로고침 / 탭 닫기 / 주소 변경 시 경고
+  useEffect(() => {
+    if (!hasUnsavedChanges) return
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      // 일부 브라우저(Chrome 등 legacy)에서는 returnValue 설정이 필요
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [hasUnsavedChanges])
+
   const waterVal  = watch('water_intake') ?? 0
   const sleepVal  = watch('sleep_hours')  ?? 0
   const condition = watch('condition')
 
   function handleMealChange(entries: MealPanelEntry[]) {
     setMealEntries(entries)
+    setMealEntriesDirty(true)
     const ratio = (e: MealPanelEntry) => {
       const r = e.intake_ratio
       if (r === 0.25 || r === 0.5 || r === 0.75 || r === 1) return r
@@ -173,6 +191,9 @@ export default function DiaryClient({ date, initialLog, profile, userId }: Props
             : null,
         })
         await upsertDailyLog({ ...values, date, meal_entries: mealEntries })
+        // 저장 성공 → 현재 값을 새로운 기준값으로 reset → isDirty=false
+        reset(values, { keepValues: true })
+        setMealEntriesDirty(false)
         setToast({ message: '오늘의 기록이 저장됐어요 ✅', type: 'success' })
       } catch (e) {
         console.error(e)
@@ -181,15 +202,25 @@ export default function DiaryClient({ date, initialLog, profile, userId }: Props
     })
   }
 
+  function confirmDiscardChanges(): boolean {
+    if (!hasUnsavedChanges) return true
+    return window.confirm(
+      '저장하지 않은 변경사항이 있어요.\n페이지를 이동하면 변경사항이 사라집니다.\n계속하시겠어요?'
+    )
+  }
+
   function goDate(days: number) {
     const next  = shiftDate(date, days)
     const today = new Date().toLocaleDateString('en-CA')
     if (next > today) return
+    if (!confirmDiscardChanges()) return
     router.push(`/diary?date=${next}`)
   }
 
   function handleDatePick(nextDate: string) {
     if (!nextDate) return
+    if (nextDate === date) return
+    if (!confirmDiscardChanges()) return
     router.push(`/diary?date=${nextDate}`)
   }
 
@@ -237,13 +268,24 @@ export default function DiaryClient({ date, initialLog, profile, userId }: Props
             </button>
           </div>
 
-          <button type="button" onClick={handleSubmit(onSubmit)} disabled={isPending}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[13px] font-semibold
-              transition-all duration-200 bg-gradient-to-r from-pink-600 to-rose-400 text-white
-              shadow-[0_3px_12px_rgba(236,72,153,0.3)] disabled:opacity-60">
+          <button
+            type="button"
+            onClick={handleSubmit(onSubmit)}
+            disabled={isPending}
+            className={`relative flex items-center gap-1.5 px-4 py-2 rounded-full text-[13px] font-semibold
+              transition-all duration-200 text-white disabled:opacity-60
+              ${hasUnsavedChanges
+                ? 'bg-gradient-to-r from-pink-700 to-rose-500 shadow-[0_4px_16px_rgba(236,72,153,0.45)] ring-2 ring-pink-300 animate-pulse'
+                : 'bg-gradient-to-r from-pink-600 to-rose-400 shadow-[0_3px_12px_rgba(236,72,153,0.3)]'}`}
+          >
             {isPending
               ? <><span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />저장 중</>
-              : <><Save size={14} />저장하기</>}
+              : hasUnsavedChanges
+                ? <><Save size={14} />저장 필요</>
+                : <><Save size={14} />저장하기</>}
+            {hasUnsavedChanges && !isPending && (
+              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-red-500 ring-2 ring-white" />
+            )}
           </button>
         </div>
       </div>
@@ -393,15 +435,25 @@ export default function DiaryClient({ date, initialLog, profile, userId }: Props
 
         {/* 모바일 저장 버튼 */}
         <div className="fixed bottom-16 left-0 right-0 px-4 md:hidden">
-          <button type="submit" disabled={isPending}
-            className="w-full h-[52px] rounded-[12px]
-              bg-gradient-to-r from-pink-600 via-pink-500 to-rose-400
+          <button
+            type="submit"
+            disabled={isPending}
+            className={`relative w-full h-[52px] rounded-[12px]
               text-white text-[16px] font-semibold
-              shadow-[0_6px_20px_rgba(236,72,153,0.35)]
-              disabled:opacity-60 transition-all flex items-center justify-center gap-2">
+              disabled:opacity-60 transition-all flex items-center justify-center gap-2
+              ${hasUnsavedChanges
+                ? 'bg-gradient-to-r from-pink-700 via-pink-600 to-rose-500 shadow-[0_8px_24px_rgba(236,72,153,0.5)] ring-2 ring-pink-400 animate-pulse'
+                : 'bg-gradient-to-r from-pink-600 via-pink-500 to-rose-400 shadow-[0_6px_20px_rgba(236,72,153,0.35)]'}`}
+          >
             {isPending
               ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />저장 중...</>
-              : <><Save size={18} />오늘의 기록 저장</>}
+              : hasUnsavedChanges
+                ? <>
+                    <span className="w-2 h-2 rounded-full bg-white" />
+                    <Save size={18} />
+                    저장 필요 — 변경사항을 저장하세요
+                  </>
+                : <><Save size={18} />오늘의 기록 저장</>}
           </button>
         </div>
 
