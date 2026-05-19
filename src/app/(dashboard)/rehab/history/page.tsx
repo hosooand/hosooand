@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import {
   getExerciseLogs,
   getWeekLogDates,
@@ -10,6 +9,7 @@ import {
   getPrescriptionByPatient,
 } from "@/lib/rehab/actions";
 import { weekRangeFromDate } from "@/lib/rehab/date-only";
+import { useDashboardSession } from "../../_components/DashboardSessionContext";
 import HistoryClient from "./HistoryClient";
 import type { ExerciseLog, MedicalImage, Prescription } from "@/types/rehab";
 
@@ -24,34 +24,19 @@ interface PageData {
 
 export default function HistoryPage() {
   const router = useRouter();
+  const { userId, profile } = useDashboardSession();
   const [data, setData] = useState<PageData | null>(null);
 
   useEffect(() => {
+    if (profile && profile.role !== "member") {
+      router.replace("/rehab-manage");
+    }
+  }, [profile, router]);
+
+  useEffect(() => {
+    if (!profile || profile.role !== "member") return;
     let cancelled = false;
     (async () => {
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
-        router.replace("/login");
-        return;
-      }
-
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .single();
-      if (!profile) {
-        router.replace("/login");
-        return;
-      }
-      if (profile.role !== "member") {
-        router.replace("/rehab-manage");
-        return;
-      }
-
       const today = new Date().toLocaleDateString("en-CA");
       const { start: startDate, end: endDate } = weekRangeFromDate(today);
 
@@ -61,10 +46,10 @@ export default function HistoryPage() {
       let prescription: Prescription | null = null;
 
       const [logsRes, datesRes, presRes, imgRes] = await Promise.allSettled([
-        getExerciseLogs(user.id, startDate, endDate),
-        getWeekLogDates(user.id, startDate, endDate),
-        getPrescriptionByPatient(user.id),
-        getMedicalImages(user.id),
+        getExerciseLogs(userId, startDate, endDate),
+        getWeekLogDates(userId, startDate, endDate),
+        getPrescriptionByPatient(userId),
+        getMedicalImages(userId),
       ]);
 
       if (logsRes.status === "fulfilled") weekLogs = logsRes.value;
@@ -86,7 +71,7 @@ export default function HistoryPage() {
     return () => {
       cancelled = true;
     };
-  }, [router]);
+  }, [userId, profile]);
 
   if (!data) {
     return <HistorySkeleton />;

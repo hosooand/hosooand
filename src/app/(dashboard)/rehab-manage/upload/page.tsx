@@ -4,6 +4,7 @@ import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { getMedicalImages } from "@/lib/rehab/actions";
+import { useDashboardSession } from "../../_components/DashboardSessionContext";
 import UploadClient from "./UploadClient";
 import type { MedicalImage } from "@/types/rehab";
 import type { MemberSearchRow } from "@/lib/rehab/actions";
@@ -21,33 +22,20 @@ interface PageData {
 export default function UploadPage({ searchParams }: Props) {
   const { patientId: initialPatientId } = use(searchParams);
   const router = useRouter();
+  const { profile } = useDashboardSession();
   const [data, setData] = useState<PageData | null>(null);
 
   useEffect(() => {
+    if (profile?.role === "member") {
+      router.replace("/rehab");
+    }
+  }, [profile?.role, router]);
+
+  useEffect(() => {
+    if (profile?.role === "member") return;
     let cancelled = false;
     (async () => {
       const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
-        router.replace("/login");
-        return;
-      }
-
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .single();
-      if (!profile) {
-        router.replace("/login");
-        return;
-      }
-      if (profile.role === "member") {
-        router.replace("/rehab");
-        return;
-      }
 
       let initialPatient: MemberSearchRow | null = null;
       let initialImages: MedicalImage[] = [];
@@ -82,7 +70,7 @@ export default function UploadPage({ searchParams }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [initialPatientId, router]);
+  }, [initialPatientId, profile?.role]);
 
   if (!data) {
     return <UploadSkeleton />;

@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import { getExercises, getBodyParts } from "@/lib/rehab/actions";
+import { useDashboardSession } from "../../_components/DashboardSessionContext";
 import ExercisesClient from "./ExercisesClient";
 import type { Exercise, BodyPart } from "@/types/rehab";
 
@@ -14,34 +14,20 @@ interface PageData {
 
 export default function ExercisesPage() {
   const router = useRouter();
+  const { profile } = useDashboardSession();
   const [data, setData] = useState<PageData | null>(null);
 
+  // role 가드: layout이 인증/승인까지 처리. 페이지는 잘못된 진입만 차단.
   useEffect(() => {
+    if (profile?.role === "member") {
+      router.replace("/rehab");
+    }
+  }, [profile?.role, router]);
+
+  useEffect(() => {
+    if (profile?.role === "member") return; // 곧 redirect됨
     let cancelled = false;
     (async () => {
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
-        router.replace("/login");
-        return;
-      }
-
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .single();
-      if (!profile) {
-        router.replace("/login");
-        return;
-      }
-      if (profile.role === "member") {
-        router.replace("/rehab");
-        return;
-      }
-
       const [exercises, bodyParts] = await Promise.all([
         getExercises(),
         getBodyParts(),
@@ -54,7 +40,7 @@ export default function ExercisesPage() {
     return () => {
       cancelled = true;
     };
-  }, [router]);
+  }, [profile?.role]);
 
   if (!data) {
     return <ExercisesSkeleton />;

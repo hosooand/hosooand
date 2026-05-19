@@ -5,6 +5,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import AvatarPicker from './AvatarPicker'
+import { DashboardSessionProvider } from './DashboardSessionContext'
 
 export interface DashboardProfile {
   name:    string | null
@@ -26,7 +27,11 @@ export default function DashboardShell({
 }) {
   const pathname = usePathname()
   if (pathname === '/select-service') {
-    return <>{children}</>
+    return (
+      <DashboardSessionProvider value={{ userId, profile }}>
+        {children}
+      </DashboardSessionProvider>
+    )
   }
 
   const isRehabApp =
@@ -39,6 +44,7 @@ export default function DashboardShell({
     : '/rehab'
 
   return (
+    <DashboardSessionProvider value={{ userId, profile }}>
     <div className="min-h-screen bg-[#FFF8FB]">
 
       <header
@@ -107,5 +113,6 @@ export default function DashboardShell({
 
       <main className="pb-20">{children}</main>
     </div>
+    </DashboardSessionProvider>
   )
 }

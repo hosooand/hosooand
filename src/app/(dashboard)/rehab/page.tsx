@@ -2,13 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import {
   getPrescriptionByPatient,
   getWeeklyStats,
   getTodayLogs,
   getWeeklyExerciseLogs,
 } from "@/lib/rehab/actions";
+import { useDashboardSession } from "../_components/DashboardSessionContext";
 import RehabDashboardClient from "./RehabDashboardClient";
 import type { Prescription } from "@/types/rehab";
 import type { WeeklyChartData } from "@/lib/rehab/actions";
@@ -25,35 +25,19 @@ interface PageData {
 
 export default function RehabPage() {
   const router = useRouter();
+  const { userId, profile } = useDashboardSession();
   const [data, setData] = useState<PageData | null>(null);
 
   useEffect(() => {
+    if (profile && profile.role !== "member") {
+      router.replace("/rehab-manage");
+    }
+  }, [profile, router]);
+
+  useEffect(() => {
+    if (!profile || profile.role !== "member") return;
     let cancelled = false;
     (async () => {
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
-        router.replace("/login");
-        return;
-      }
-
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("name, role")
-        .eq("id", user.id)
-        .single();
-
-      if (!profile) {
-        router.replace("/login");
-        return;
-      }
-      if (profile.role !== "member") {
-        router.replace("/rehab-manage");
-        return;
-      }
-
       let prescription: Prescription | null = null;
       let weeklyCount = 0;
       let avgPain = 0;
@@ -63,11 +47,11 @@ export default function RehabPage() {
 
       try {
         const [pres, stats, todayLogs, weekly7, weekly14] = await Promise.all([
-          getPrescriptionByPatient(user.id),
-          getWeeklyStats(user.id),
-          getTodayLogs(user.id),
-          getWeeklyExerciseLogs(user.id, 7),
-          getWeeklyExerciseLogs(user.id, 14),
+          getPrescriptionByPatient(userId),
+          getWeeklyStats(userId),
+          getTodayLogs(userId),
+          getWeeklyExerciseLogs(userId, 7),
+          getWeeklyExerciseLogs(userId, 14),
         ]);
 
         prescription = pres;
@@ -97,7 +81,7 @@ export default function RehabPage() {
     return () => {
       cancelled = true;
     };
-  }, [router]);
+  }, [userId, profile]);
 
   if (!data) {
     return <RehabDashboardSkeleton />;

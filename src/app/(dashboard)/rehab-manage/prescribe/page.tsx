@@ -4,6 +4,7 @@ import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { getBodyParts, getPrescriptionByPatient } from "@/lib/rehab/actions";
+import { useDashboardSession } from "../../_components/DashboardSessionContext";
 import PrescribeClient, {
   type PrescriptionDraft,
 } from "./PrescribeClient";
@@ -61,9 +62,17 @@ function buildInitialDraftFromPrescription(
 export default function PrescribePage({ searchParams }: Props) {
   const { patientId, edit } = use(searchParams);
   const router = useRouter();
+  const { profile } = useDashboardSession();
   const [data, setData] = useState<PageData | null>(null);
 
   useEffect(() => {
+    if (profile?.role === "member") {
+      router.replace("/rehab");
+    }
+  }, [profile?.role, router]);
+
+  useEffect(() => {
+    if (profile?.role === "member") return;
     let cancelled = false;
     (async () => {
       if (!patientId) {
@@ -72,27 +81,6 @@ export default function PrescribePage({ searchParams }: Props) {
       }
 
       const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
-        router.replace("/login");
-        return;
-      }
-
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .single();
-      if (!profile) {
-        router.replace("/login");
-        return;
-      }
-      if (profile.role === "member") {
-        router.replace("/rehab");
-        return;
-      }
 
       // patient + body parts + (편집 시 처방) 병렬
       const [patientRes, bodyPartsRes, prescriptionRes] =
@@ -134,7 +122,7 @@ export default function PrescribePage({ searchParams }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [patientId, edit, router]);
+  }, [patientId, edit, profile?.role, router]);
 
   if (!data) {
     return <PrescribeSkeleton />;

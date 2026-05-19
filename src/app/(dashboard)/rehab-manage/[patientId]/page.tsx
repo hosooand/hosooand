@@ -8,6 +8,7 @@ import {
   getPatientDetailExerciseBundle,
   getMedicalImages,
 } from "@/lib/rehab/actions";
+import { useDashboardSession } from "../../_components/DashboardSessionContext";
 import PatientDetailClient from "./PatientDetailClient";
 import type { ExerciseLog, MedicalImage, Prescription } from "@/types/rehab";
 import type {
@@ -43,35 +44,22 @@ const emptyStats: ExerciseStatsData = {
 export default function PatientDetailPage({ params }: Props) {
   const { patientId } = use(params);
   const router = useRouter();
+  const { profile } = useDashboardSession();
   const [data, setData] = useState<PageData | null>(null);
 
   useEffect(() => {
+    if (profile?.role === "member") {
+      router.replace("/rehab");
+    }
+  }, [profile?.role, router]);
+
+  useEffect(() => {
+    if (profile?.role === "member") return;
     let cancelled = false;
     (async () => {
       const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
-        router.replace("/login");
-        return;
-      }
 
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .single();
-      if (!profile) {
-        router.replace("/login");
-        return;
-      }
-      if (profile.role === "member") {
-        router.replace("/rehab");
-        return;
-      }
-
-      // patient + 3 번들 + 인증 후 한 번에 병렬 호출
+      // patient + 3 번들 병렬 호출
       const [patientRes, presRes, bundleRes, imgRes] =
         await Promise.allSettled([
           supabase
@@ -148,7 +136,7 @@ export default function PatientDetailPage({ params }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [patientId, router]);
+  }, [patientId, profile?.role, router]);
 
   if (!data) {
     return <PatientDetailSkeleton />;
