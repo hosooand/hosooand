@@ -188,11 +188,26 @@ export async function uploadLeafletImage(formData: FormData): Promise<string> {
     const fileName = `${crypto.randomUUID()}.${ext}`;
     const filePath = `leaflets/${fileName}`;
 
-    const { error } = await supabase.storage
+    const { data: uploadData, error } = await supabase.storage
       .from("exercise-leaflets")
       .upload(filePath, file);
 
-    if (error) throw error;
+    if (error) {
+      console.error(JSON.stringify(error));
+      console.error("[uploadLeafletImage] supabase storage 업로드 실패", {
+        message: error.message,
+        name: error.name,
+        error,
+        bucket: "exercise-leaflets",
+        filePath,
+        fileName: file.name,
+        fileType: file.type,
+        fileSize: file.size,
+      });
+      throw error;
+    }
+
+    console.log("[uploadLeafletImage] 업로드 성공", { path: uploadData?.path, filePath });
 
     const {
       data: { publicUrl },

@@ -171,7 +171,14 @@ export default function ExerciseModal({
       formData.append("file", file);
       const url = await uploadLeafletImage(formData);
       setLeafletImages((prev) => [...prev, url]);
-    } catch {
+    } catch (err) {
+      console.error("[ExerciseModal] 리플렛 이미지 업로드 실패", {
+        error: err,
+        message: err instanceof Error ? err.message : String(err),
+        fileName: file.name,
+        fileType: file.type,
+        fileSize: file.size,
+      });
       setError("이미지 업로드에 실패했습니다.");
     } finally {
       setUploading(false);
