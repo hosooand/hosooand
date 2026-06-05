@@ -1,9 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { GoogleGenerativeAI } from '@google/generative-ai'
+import sharp from 'sharp'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { normalizeMealAnalysis } from '@/lib/meal-analysis-normalize'
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
+
+// Gemini 전송 전 이미지 압축: 최대 800px 리사이즈 + JPEG 70% → 토큰/비용 절감
+async function compressImage(buffer: Buffer): Promise<string> {
+  const compressed = await sharp(buffer)
+    .resize(800, 800, { fit: 'inside', withoutEnlargement: true })
+    .jpeg({ quality: 70 })
+    .toBuffer()
+
+  return compressed.toString('base64')
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -23,9 +34,9 @@ export async function POST(req: NextRequest) {
     }
 
     const imgRes = await fetch(imageUrl)
-    const contentType = imgRes.headers.get('content-type') ?? 'image/jpeg'
     const arrayBuffer = await imgRes.arrayBuffer()
-    const base64 = Buffer.from(arrayBuffer).toString('base64')
+    const base64 = await compressImage(Buffer.from(arrayBuffer))
+    const contentType = 'image/jpeg'
 
     const model = genAI.getGenerativeModel({ model: 'gemini-flash-lite-latest' })
 
