@@ -5,6 +5,12 @@ import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
+const INPUT_STYLE: React.CSSProperties = {
+  border: '1px solid #e2e8f0',
+  backgroundColor: '#f8fafc',
+  borderRadius: 10,
+}
+
 export default function LoginPage() {
   const supabase = createClient()
   const router = useRouter()
@@ -51,10 +57,10 @@ export default function LoginPage() {
     <div className="w-full max-w-[400px]">
 
       <div className="mb-7">
-        <h2 className="text-[26px] font-semibold text-gray-800 mb-1.5">
+        <h2 className="mb-1.5" style={{ fontSize: 22, fontWeight: 600, color: '#1e293b' }}>
           다시 만나서 반가워요 👋
         </h2>
-        <p className="text-[14px] font-light text-gray-400">
+        <p style={{ fontSize: 13, color: '#94a3b8' }}>
           이메일과 비밀번호로 로그인하세요
         </p>
       </div>
@@ -76,10 +82,11 @@ export default function LoginPage() {
             onChange={e => { setEmail(e.target.value); setErrors(p => ({ ...p, email: undefined })) }}
             placeholder="example@email.com"
             autoComplete="email"
-            className={`w-full h-[50px] px-4 rounded-[10px] border text-[15px] text-gray-800 outline-none transition-all
+            style={errors.email ? { ...INPUT_STYLE, borderColor: '#fb7185' } : INPUT_STYLE}
+            className={`w-full h-[50px] px-4 text-[15px] text-gray-800 outline-none transition-all
               ${errors.email
-                ? 'border-rose-400 ring-2 ring-rose-100'
-                : 'border-gray-200 focus:border-pink-400 focus:ring-2 focus:ring-pink-100'}`}
+                ? 'ring-2 ring-rose-100'
+                : 'focus:ring-2 focus:ring-pink-100 focus:!border-pink-400'}`}
           />
           {errors.email && <p className="mt-1.5 text-xs text-rose-500">{errors.email}</p>}
         </div>
@@ -94,10 +101,11 @@ export default function LoginPage() {
               onChange={e => { setPassword(e.target.value); setErrors(p => ({ ...p, password: undefined })) }}
               placeholder="비밀번호를 입력하세요"
               autoComplete="current-password"
-              className={`w-full h-[50px] px-4 pr-11 rounded-[10px] border text-[15px] text-gray-800 outline-none transition-all
+              style={errors.password ? { ...INPUT_STYLE, borderColor: '#fb7185' } : INPUT_STYLE}
+              className={`w-full h-[50px] px-4 pr-11 text-[15px] text-gray-800 outline-none transition-all
                 ${errors.password
-                  ? 'border-rose-400 ring-2 ring-rose-100'
-                  : 'border-gray-200 focus:border-pink-400 focus:ring-2 focus:ring-pink-100'}`}
+                  ? 'ring-2 ring-rose-100'
+                  : 'focus:ring-2 focus:ring-pink-100 focus:!border-pink-400'}`}
             />
             <button
               type="button"
@@ -111,19 +119,19 @@ export default function LoginPage() {
 
         {/* 로그인 유지 / 비밀번호 찾기 */}
         <div className="flex items-center justify-between mb-6">
-          <label className="flex items-center gap-2 cursor-pointer" onClick={() => setRemember(p => !p)}>
-            <div className={`w-[18px] h-[18px] rounded-[5px] border-[1.5px] flex items-center justify-center transition-all
-              ${remember ? 'bg-pink-500 border-pink-500' : 'border-gray-200'}`}>
-              {remember && (
-                <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
-                  <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              )}
-            </div>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={remember}
+              onChange={e => setRemember(e.target.checked)}
+              className="w-[16px] h-[16px] cursor-pointer"
+              style={{ accentColor: '#ec4899' }}
+            />
             <span className="text-[13px] text-gray-600 select-none">로그인 상태 유지</span>
           </label>
           <Link href="/forgot-password"
-            className="text-[13px] text-pink-500 font-medium hover:text-pink-700 transition-colors">
+            className="text-[13px] font-medium transition-colors hover:opacity-75"
+            style={{ color: '#ec4899' }}>
             비밀번호 찾기
           </Link>
         </div>
@@ -132,8 +140,11 @@ export default function LoginPage() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full h-[52px] rounded-[10px]
-            bg-gradient-to-r from-pink-600 via-pink-500 to-rose-400
+          style={{
+            background: 'linear-gradient(135deg, #f472b6, #ec4899, #db2777)',
+            borderRadius: 10,
+          }}
+          className="w-full h-[52px]
             text-white text-[16px] font-semibold tracking-[0.3px] mb-5
             shadow-[0_6px_20px_rgba(236,72,153,0.35)]
             hover:-translate-y-0.5 hover:shadow-[0_10px_28px_rgba(236,72,153,0.4)]
@@ -157,7 +168,8 @@ export default function LoginPage() {
       <p className="text-center text-[13px] text-gray-400">
         아직 계정이 없으신가요?{' '}
         <Link href="/signup"
-          className="text-pink-500 font-semibold underline underline-offset-2 hover:text-pink-700 transition-colors">
+          className="font-semibold underline underline-offset-2 transition-colors hover:opacity-75"
+          style={{ color: '#ec4899' }}>
           회원가입
         </Link>
       </p>
