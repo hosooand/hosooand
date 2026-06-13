@@ -11,10 +11,13 @@ import {
 
 export interface PrescriptionDraft {
   selectedBodyParts: string[];
-  levelByBodyPart: Record<string, ExerciseLevel>;
+  /** 부위별 선택된 단계들(다중 선택). 예: { partId: [1, 3] } */
+  levelsByBodyPart: Record<string, ExerciseLevel[]>;
   exercisesByBodyPart: Record<string, string[]>;
   note: string;
 }
+
+const ALL_LEVELS: ExerciseLevel[] = [1, 2, 3];
 
 const LEVEL_COLORS: Record<
   ExerciseLevel,
@@ -50,10 +53,14 @@ interface Props {
 function emptyDraft(): PrescriptionDraft {
   return {
     selectedBodyParts: [],
-    levelByBodyPart: {},
+    levelsByBodyPart: {},
     exercisesByBodyPart: {},
     note: "",
   };
+}
+
+function sortLevels(levels: ExerciseLevel[]): ExerciseLevel[] {
+  return [...levels].sort((a, b) => a - b);
 }
 
 export default function PrescribeClient({
@@ -70,7 +77,7 @@ export default function PrescribeClient({
   const [exercisesCache, setExercisesCache] = useState<Exercise[]>([]);
   const [loadingExercises, setLoadingExercises] = useState(false);
 
-  const { selectedBodyParts, levelByBodyPart, exercisesByBodyPart, note } =
+  const { selectedBodyParts, levelsByBodyPart, exercisesByBodyPart, note } =
     draft;
 
   const setNote = (v: string) =>
@@ -81,41 +88,53 @@ export default function PrescribeClient({
       const has = d.selectedBodyParts.includes(id);
       if (has) {
         const nextParts = d.selectedBodyParts.filter((x) => x !== id);
-        const nextLevel = { ...d.levelByBodyPart };
+        const nextLevels = { ...d.levelsByBodyPart };
         const nextEx = { ...d.exercisesByBodyPart };
-        delete nextLevel[id];
+        delete nextLevels[id];
         delete nextEx[id];
         return {
           ...d,
           selectedBodyParts: nextParts,
-          levelByBodyPart: nextLevel,
+          levelsByBodyPart: nextLevels,
           exercisesByBodyPart: nextEx,
         };
       }
       return {
         ...d,
         selectedBodyParts: [...d.selectedBodyParts, id],
-        levelByBodyPart: { ...d.levelByBodyPart, [id]: 1 },
+        // 기본값: 1단계 선택 (다중 선택 가능)
+        levelsByBodyPart: { ...d.levelsByBodyPart, [id]: [1] },
         exercisesByBodyPart: { ...d.exercisesByBodyPart, [id]: [] },
       };
     });
   };
 
-  const setLevelForPart = (bodyPartId: string, level: ExerciseLevel) => {
+  const toggleLevelForPart = (bodyPartId: string, level: ExerciseLevel) => {
     setDraft((d) => {
-      const nextLevel = { ...d.levelByBodyPart, [bodyPartId]: level };
-      const allowed = exercisesCache.filter(
-        (e) =>
-          e.body_part_id === bodyPartId &&
-          e.level === level &&
-          e.is_active
+      const current = d.levelsByBodyPart[bodyPartId] ?? [];
+      const has = current.includes(level);
+      const nextLevels = has
+        ? current.filter((l) => l !== level)
+        : sortLevels([...current, level]);
+
+      // 선택된 단계들에 해당하는 운동만 유지 (해제된 단계의 운동은 제거)
+      const allowedLevelSet = new Set(nextLevels);
+      const allowedIds = new Set(
+        exercisesCache
+          .filter(
+            (e) =>
+              e.body_part_id === bodyPartId &&
+              allowedLevelSet.has(e.level) &&
+              e.is_active
+          )
+          .map((e) => e.id)
       );
-      const allowedIds = new Set(allowed.map((e) => e.id));
       const prevIds = d.exercisesByBodyPart[bodyPartId] ?? [];
       const nextIds = prevIds.filter((eid) => allowedIds.has(eid));
+
       return {
         ...d,
-        levelByBodyPart: nextLevel,
+        levelsByBodyPart: { ...d.levelsByBodyPart, [bodyPartId]: nextLevels },
         exercisesByBodyPart: {
           ...d.exercisesByBodyPart,
           [bodyPartId]: nextIds,
@@ -143,15 +162,18 @@ export default function PrescribeClient({
 
   const exercisesForPartAndLevel = useCallback(
     (bodyPartId: string) => {
-      const lv = levelByBodyPart[bodyPartId] ?? 1;
-      return exercisesCache.filter(
-        (e) =>
-          e.body_part_id === bodyPartId &&
-          e.level === lv &&
-          e.is_active
-      );
+      const levels = levelsByBodyPart[bodyPartId] ?? [];
+      const levelSet = new Set(levels);
+      return exercisesCache
+        .filter(
+          (e) =>
+            e.body_part_id === bodyPartId &&
+            levelSet.has(e.level) &&
+            e.is_active
+        )
+        .sort((a, b) => a.level - b.level);
     },
-    [exercisesCache, levelByBodyPart]
+    [exercisesCache, levelsByBodyPart]
   );
 
   useEffect(() => {
@@ -171,12 +193,14 @@ export default function PrescribeClient({
       let changed = false;
       const nextEx = { ...d.exercisesByBodyPart };
       for (const bpId of d.selectedBodyParts) {
-        const lv = d.levelByBodyPart[bpId] ?? 1;
+        const levelSet = new Set(d.levelsByBodyPart[bpId] ?? []);
         const allowed = new Set(
           exercisesCache
             .filter(
               (e) =>
-                e.body_part_id === bpId && e.level === lv && e.is_active
+                e.body_part_id === bpId &&
+                levelSet.has(e.level) &&
+                e.is_active
             )
             .map((e) => e.id)
         );
@@ -204,8 +228,9 @@ export default function PrescribeClient({
   const canGoNext = () => {
     if (step === 1) return selectedBodyParts.length >= 1;
     if (step === 2) {
+      // 각 부위마다 최소 1개 단계 선택 필요
       return selectedBodyParts.every(
-        (id) => (levelByBodyPart[id] ?? 1) >= 1
+        (id) => (levelsByBodyPart[id]?.length ?? 0) >= 1
       );
     }
     if (step === 3) {
@@ -228,6 +253,16 @@ export default function PrescribeClient({
     if (missing.length > 0) {
       alert("각 통증 부위마다 최소 1개 이상의 운동을 선택해주세요.");
       return;
+    }
+
+    // 액션은 부위별 대표 단계(최소 단계)를 받아 처방의 current_level을 정합니다.
+    // 다중 선택된 단계 중 최소값을 대표로 전달 → 기존 단일 선택과 동일하게 동작.
+    const levelByBodyPart: Record<string, ExerciseLevel> = {};
+    for (const id of selectedBodyParts) {
+      const lvls = levelsByBodyPart[id] ?? [];
+      levelByBodyPart[id] = (lvls.length > 0
+        ? (Math.min(...lvls) as ExerciseLevel)
+        : 1) as ExerciseLevel;
     }
 
     startTransition(async () => {
@@ -407,9 +442,20 @@ export default function PrescribeClient({
 
   const renderStep2 = () => (
     <div>
+      <p
+        style={{
+          fontSize: 12,
+          color: "#94a3b8",
+          marginTop: 0,
+          marginBottom: 14,
+          paddingLeft: 4,
+        }}
+      >
+        부위별로 단계를 여러 개 선택할 수 있어요 (예: 1단계 + 3단계)
+      </p>
       {selectedBodyParts.map((bpId) => {
         const name = bodyPartName(bpId);
-        const lv = levelByBodyPart[bpId] ?? 1;
+        const levels = levelsByBodyPart[bpId] ?? [];
         return (
           <div
             key={bpId}
@@ -437,32 +483,49 @@ export default function PrescribeClient({
               {name}
             </span>
             <div style={{ display: "flex", gap: 8 }}>
-              {([1, 2, 3] as ExerciseLevel[]).map((levelOpt) => {
-                const active = lv === levelOpt;
+              {ALL_LEVELS.map((levelOpt) => {
+                const active = levels.includes(levelOpt);
                 const c = LEVEL_COLORS[levelOpt];
                 return (
                   <button
                     key={levelOpt}
                     type="button"
-                    onClick={() => setLevelForPart(bpId, levelOpt)}
+                    aria-pressed={active}
+                    onClick={() => toggleLevelForPart(bpId, levelOpt)}
                     style={{
                       flex: 1,
                       padding: "10px 0",
                       borderRadius: 10,
                       textAlign: "center",
                       fontSize: 13,
-                      border: "none",
+                      border: active
+                        ? `2px solid ${c.color}`
+                        : "2px solid transparent",
                       cursor: "pointer",
                       fontWeight: active ? 700 : 500,
                       backgroundColor: active ? c.bg : "#f8fafc",
                       color: active ? c.color : c.inactive,
+                      transition: "all 0.15s",
                     }}
                   >
+                    {active ? "✓ " : ""}
                     {levelOpt}단계
                   </button>
                 );
               })}
             </div>
+            {levels.length === 0 && (
+              <p
+                style={{
+                  fontSize: 11,
+                  color: "#ef4444",
+                  marginTop: 10,
+                  marginBottom: 0,
+                }}
+              >
+                최소 1개 단계를 선택해주세요
+              </p>
+            )}
           </div>
         );
       })}
@@ -502,10 +565,9 @@ export default function PrescribeClient({
       <div>
         {selectedBodyParts.map((bpId) => {
           const name = bodyPartName(bpId);
-          const lv = levelByBodyPart[bpId] ?? 1;
+          const levels = sortLevels(levelsByBodyPart[bpId] ?? []);
           const list = exercisesForPartAndLevel(bpId);
           const selected = exercisesByBodyPart[bpId] ?? [];
-          const lvlColor = LEVEL_COLORS[lv];
           return (
             <div key={bpId} style={{ marginBottom: 24 }}>
               <p
@@ -521,18 +583,24 @@ export default function PrescribeClient({
                 }}
               >
                 <span>{name}</span>
-                <span
-                  style={{
-                    padding: "2px 10px",
-                    borderRadius: 20,
-                    fontSize: 11,
-                    fontWeight: 700,
-                    backgroundColor: lvlColor.bg,
-                    color: lvlColor.color,
-                  }}
-                >
-                  {lv}단계
-                </span>
+                {levels.map((lvOpt) => {
+                  const c = LEVEL_COLORS[lvOpt];
+                  return (
+                    <span
+                      key={lvOpt}
+                      style={{
+                        padding: "2px 10px",
+                        borderRadius: 20,
+                        fontSize: 11,
+                        fontWeight: 700,
+                        backgroundColor: c.bg,
+                        color: c.color,
+                      }}
+                    >
+                      {lvOpt}단계
+                    </span>
+                  );
+                })}
                 <span style={{ color: "#64748b", fontWeight: 600 }}>
                   운동
                 </span>
@@ -573,6 +641,8 @@ export default function PrescribeClient({
               ) : (
                 list.map((ex) => {
                   const isChecked = selected.includes(ex.id);
+                  const exLevel = ex.level as ExerciseLevel;
+                  const exLevelColor = LEVEL_COLORS[exLevel];
                   return (
                     <div
                       key={ex.id}
@@ -671,11 +741,11 @@ export default function PrescribeClient({
                               borderRadius: 20,
                               fontSize: 10,
                               fontWeight: 700,
-                              backgroundColor: lvlColor.bg,
-                              color: lvlColor.color,
+                              backgroundColor: exLevelColor.bg,
+                              color: exLevelColor.color,
                             }}
                           >
-                            {lv}단계
+                            {exLevel}단계
                           </span>
                         </div>
                       </div>

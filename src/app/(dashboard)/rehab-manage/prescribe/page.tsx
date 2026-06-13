@@ -31,29 +31,27 @@ function buildInitialDraftFromPrescription(
   const parts = [...prescription.body_part_ids];
   const exercises = prescription.exercises ?? [];
   const exercisesByBodyPart: Record<string, string[]> = {};
-  const levelByBodyPart: Record<string, ExerciseLevel> = {};
-
-  for (const id of parts) {
-    exercisesByBodyPart[id] = [];
-  }
+  const levelsByBodyPart: Record<string, ExerciseLevel[]> = {};
 
   for (const pid of parts) {
     const exs = exercises.filter((e) => e.body_part_id === pid);
     if (exs.length === 0) {
-      levelByBodyPart[pid] = 1;
+      // 기존 단일 선택/빈 처방 호환: 기본 1단계
+      levelsByBodyPart[pid] = [1];
       exercisesByBodyPart[pid] = [];
     } else {
-      const lv = Math.min(...exs.map((e) => e.level as number)) as ExerciseLevel;
-      levelByBodyPart[pid] = lv;
-      exercisesByBodyPart[pid] = exs
-        .filter((e) => e.level === lv)
-        .map((e) => e.id);
+      // 저장된 운동들의 단계 집합을 복원 (단일·다중 처방 모두 호환)
+      const levels = Array.from(
+        new Set(exs.map((e) => e.level as ExerciseLevel))
+      ).sort((a, b) => a - b);
+      levelsByBodyPart[pid] = levels.length > 0 ? levels : [1];
+      exercisesByBodyPart[pid] = exs.map((e) => e.id);
     }
   }
 
   return {
     selectedBodyParts: parts,
-    levelByBodyPart,
+    levelsByBodyPart,
     exercisesByBodyPart,
     note: prescription.note ?? "",
   };

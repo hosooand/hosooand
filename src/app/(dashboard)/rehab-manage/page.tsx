@@ -6,22 +6,12 @@ import { createClient } from "@/lib/supabase/client";
 import { useDashboardSession } from "../_components/DashboardSessionContext";
 import PatientListClient from "./PatientListClient";
 
-const PATIENT_SELECT =
-  "id, name, member_number, created_at, prescriptions(status)";
-
 interface PatientRow {
   id: string;
   name: string | null;
   member_number: string | null;
   has_prescription: boolean;
 }
-
-type RowWithRx = {
-  id: string;
-  name: string | null;
-  member_number: string | null;
-  prescriptions?: { status: string }[] | null;
-};
 
 export default function RehabManagePage() {
   const router = useRouter();
@@ -41,51 +31,33 @@ export default function RehabManagePage() {
     (async () => {
       const supabase = createClient();
 
-      const { data: rows, error } = await supabase
-        .from("profiles")
-        .select(PATIENT_SELECT)
-        .eq("role", "member")
-        .order("created_at", { ascending: false })
-        .limit(100);
-
-      let patientsWithStatus: PatientRow[] = [];
-
-      if (!error && rows) {
-        patientsWithStatus = (rows as unknown as RowWithRx[]).map((p) => ({
-          id: p.id,
-          name: p.name || null,
-          member_number: p.member_number || null,
-          has_prescription: (p.prescriptions ?? []).some(
-            (rx) => rx.status === "active"
-          ),
-        }));
-      } else {
-        const { data: fallback } = await supabase
+      // 회원 목록 + 활성 처방 보유자 ID를 병렬 조회.
+      // (기존엔 무거운 embedded join `prescriptions(status)`로 회원별 전체 처방 행을
+      //  끌어와 느렸음 → 필요한 컬럼만 + 활성 처방만 가볍게 조회하도록 분리)
+      const [membersRes, activeRxRes] = await Promise.all([
+        supabase
           .from("profiles")
           .select("id, name, member_number, created_at")
           .eq("role", "member")
           .order("created_at", { ascending: false })
-          .limit(100);
-        const list = fallback ?? [];
-        let activePrescriptionIds = new Set<string>();
-        if (list.length > 0) {
-          const ids = list.map((p) => p.id);
-          const { data: prescriptions } = await supabase
-            .from("prescriptions")
-            .select("patient_id")
-            .in("patient_id", ids)
-            .eq("status", "active");
-          activePrescriptionIds = new Set(
-            (prescriptions ?? []).map((r) => r.patient_id)
-          );
-        }
-        patientsWithStatus = list.map((p) => ({
-          id: p.id,
-          name: p.name || null,
-          member_number: p.member_number || null,
-          has_prescription: activePrescriptionIds.has(p.id),
-        }));
-      }
+          .limit(100),
+        supabase
+          .from("prescriptions")
+          .select("patient_id")
+          .eq("status", "active"),
+      ]);
+
+      const rows = membersRes.data ?? [];
+      const activePrescriptionIds = new Set(
+        (activeRxRes.data ?? []).map((r) => r.patient_id)
+      );
+
+      const patientsWithStatus: PatientRow[] = rows.map((p) => ({
+        id: p.id,
+        name: p.name || null,
+        member_number: p.member_number || null,
+        has_prescription: activePrescriptionIds.has(p.id),
+      }));
 
       if (cancelled) return;
       setPatients(patientsWithStatus);
