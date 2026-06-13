@@ -42,7 +42,15 @@ async function withError<T>(
   }
 }
 
+// body_parts는 거의 변하지 않는 참조 데이터 → 워밍된 서버 인스턴스 내에서 짧게 캐싱.
+// 사용자별 데이터가 아니므로 모듈 레벨 캐시로 안전하게 재사용한다.
+const BODY_PARTS_TTL_MS = 5 * 60 * 1000;
+let bodyPartsCache: { data: BodyPart[]; expiresAt: number } | null = null;
+
 export async function getBodyParts(): Promise<BodyPart[]> {
+  if (bodyPartsCache && bodyPartsCache.expiresAt > Date.now()) {
+    return bodyPartsCache.data;
+  }
   return withError("부위 목록 조회", async () => {
     const supabase = await createServerSupabaseClient();
     const { data, error } = await supabase
@@ -51,7 +59,9 @@ export async function getBodyParts(): Promise<BodyPart[]> {
       .order("display_order");
 
     if (error) throw error;
-    return data ?? [];
+    const result = data ?? [];
+    bodyPartsCache = { data: result, expiresAt: Date.now() + BODY_PARTS_TTL_MS };
+    return result;
   });
 }
 
@@ -64,8 +74,11 @@ export async function getExercises(
 
     let query = supabase
       .from("exercises")
-      .select("*, body_part:body_parts(*)")
-      .order("created_at", { ascending: false });
+      .select(
+        "id, title, description, body_part_id, content_type, video_url, leaflet_images, leaflet_text, level, created_by, is_active, created_at, updated_at, body_part:body_parts(id, name, category, display_order)"
+      )
+      .order("created_at", { ascending: false })
+      .limit(50);
 
     if (bodyPartId) {
       query = query.eq("body_part_id", bodyPartId);
@@ -76,7 +89,7 @@ export async function getExercises(
 
     const { data, error } = await query;
     if (error) throw error;
-    return data ?? [];
+    return (data ?? []) as unknown as Exercise[];
   });
 }
 

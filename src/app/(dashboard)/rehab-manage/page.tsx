@@ -7,7 +7,7 @@ import { useDashboardSession } from "../_components/DashboardSessionContext";
 import PatientListClient from "./PatientListClient";
 
 const PATIENT_SELECT =
-  "id, name, member_number, avatar, created_at, prescriptions(status)";
+  "id, name, member_number, created_at, prescriptions(status)";
 
 interface PatientRow {
   id: string;
@@ -62,7 +62,7 @@ export default function RehabManagePage() {
       } else {
         const { data: fallback } = await supabase
           .from("profiles")
-          .select("id, name, member_number, avatar, created_at")
+          .select("id, name, member_number, created_at")
           .eq("role", "member")
           .order("created_at", { ascending: false })
           .limit(100);

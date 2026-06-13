@@ -7,6 +7,7 @@ import {
   getPrescriptionByPatient,
   getPatientDetailExerciseBundle,
   getMedicalImages,
+  getBodyParts,
 } from "@/lib/rehab/actions";
 import { useDashboardSession } from "../../_components/DashboardSessionContext";
 import PatientDetailClient from "./PatientDetailClient";
@@ -59,17 +60,18 @@ export default function PatientDetailPage({ params }: Props) {
     (async () => {
       const supabase = createClient();
 
-      // patient + 3 번들 병렬 호출
-      const [patientRes, presRes, bundleRes, imgRes] =
+      // patient + 처방 + 운동 번들 + 이미지 + 부위목록(캐시됨) 모두 병렬 호출
+      const [patientRes, presRes, bundleRes, imgRes, bodyPartsRes] =
         await Promise.allSettled([
           supabase
             .from("profiles")
-            .select("id, name, member_number, role")
+            .select("id, name, member_number")
             .eq("id", patientId)
             .single(),
           getPrescriptionByPatient(patientId),
           getPatientDetailExerciseBundle(patientId),
           getMedicalImages(patientId, { limit: 5 }),
+          getBodyParts(),
         ]);
 
       const patientRow =
@@ -101,17 +103,17 @@ export default function PatientDetailPage({ params }: Props) {
       const medicalImages: MedicalImage[] =
         imgRes.status === "fulfilled" ? imgRes.value : [];
 
+      // 부위 이름 맵은 캐시된 전체 부위 목록(병렬 조회분)에서 로컬로 구성 → 추가 순차 쿼리 제거
       let bodyPartNames: Record<string, string> = {};
       if (prescription && prescription.body_part_ids.length > 0) {
-        const { data: bpData } = await supabase
-          .from("body_parts")
-          .select("id, name")
-          .in("id", prescription.body_part_ids);
-        if (bpData) {
-          bodyPartNames = Object.fromEntries(
-            bpData.map((b) => [b.id, b.name])
-          );
-        }
+        const allBodyParts =
+          bodyPartsRes.status === "fulfilled" ? bodyPartsRes.value : [];
+        const nameById = new Map(allBodyParts.map((b) => [b.id, b.name]));
+        bodyPartNames = Object.fromEntries(
+          prescription.body_part_ids
+            .filter((id) => nameById.has(id))
+            .map((id) => [id, nameById.get(id)!])
+        );
       }
 
       if (cancelled) return;
