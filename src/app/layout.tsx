@@ -6,13 +6,13 @@ import ServiceWorkerRegister from '@/components/ServiceWorkerRegister'
 const geist = Geist({ variable: '--font-geist-sans', subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title:       'S Body Clinic',
+  title:       '호수앤',
   description: 'AI 기반 맞춤형 다이어트 관리 앱',
   manifest:    '/manifest.json',
   appleWebApp: {
     capable:        true,
     statusBarStyle: 'default',
-    title:          'S Body',
+    title:          '호수앤',
   },
   icons: {
     icon:  '/icons/icon-192.png',
@@ -38,7 +38,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="mobile-web-app-capable"       content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <meta name="apple-mobile-web-app-title"   content="S Body" />
+        <meta name="apple-mobile-web-app-title"   content="호수앤" />
         <meta name="format-detection"             content="telephone=no" />
         <link rel="apple-touch-icon" href="/icons/icon-192.png" />
       </head>
