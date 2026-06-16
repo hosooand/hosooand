@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import { useDashboardSession } from "../../_components/DashboardSessionContext";
 
 const cardStyle: React.CSSProperties = {
   backgroundColor: "#ffffff",
@@ -40,6 +41,7 @@ function roleLabel(
 export default function RehabMyPage() {
   const supabase = createClient();
   const router = useRouter();
+  const { userId, profile } = useDashboardSession();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -63,23 +65,34 @@ export default function RehabMyPage() {
   ];
 
   useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+
+    // 레이아웃이 SSR로 받아온 세션 정보로 즉시 프리필 (깜빡임 최소화)
+    if (profile) {
+      setName((prev) => prev || profile.name || "");
+      setAvatar((prev) => (prev !== "duck" ? prev : profile.avatar || "duck"));
+      setDbRole(profile.role ?? null);
+      setIsApproved(profile.is_approved ?? null);
+    }
+
     async function load() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
-        router.push("/login");
-        return;
-      }
+      // 세션은 이미 컨텍스트(userId)로 확보됨 → getUser는 email용으로만,
+      // 프로필 쿼리와 병렬 실행 (기존: 순차 2회 round trip).
+      const [userRes, profileRes] = await Promise.all([
+        supabase.auth.getUser(),
+        supabase
+          .from("profiles")
+          .select("name, height, current_weight, avatar, role, is_approved")
+          .eq("id", userId)
+          .single(),
+      ]);
 
-      setEmail(user.email ?? "");
+      if (cancelled) return;
 
-      const { data } = await supabase
-        .from("profiles")
-        .select("name, height, current_weight, avatar, role, is_approved")
-        .eq("id", user.id)
-        .single();
+      setEmail(userRes.data.user?.email ?? "");
 
+      const data = profileRes.data;
       if (data) {
         setName(data.name ?? "");
         setHeight(data.height?.toString() ?? "");
@@ -91,14 +104,15 @@ export default function RehabMyPage() {
       setLoading(false);
     }
     load();
-  }, []);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, profile]);
 
   async function handleSave() {
+    if (!userId) return;
     setSaving(true);
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
 
     await supabase
       .from("profiles")
@@ -108,7 +122,7 @@ export default function RehabMyPage() {
         current_weight: currentWeight ? Number(currentWeight) : null,
         avatar,
       })
-      .eq("id", user.id);
+      .eq("id", userId);
 
     setSaving(false);
     setSaved(true);
@@ -121,13 +135,10 @@ export default function RehabMyPage() {
   }
 
   async function handleDelete() {
+    if (!userId) return;
     setDeleting(true);
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
 
-    await supabase.from("profiles").delete().eq("id", user.id);
+    await supabase.from("profiles").delete().eq("id", userId);
     await supabase.auth.signOut();
     router.push("/login");
   }

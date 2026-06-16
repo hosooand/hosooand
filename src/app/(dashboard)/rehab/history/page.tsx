@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   getExerciseLogs,
-  getWeekLogDates,
   getMedicalImages,
   getPrescriptionByPatient,
 } from "@/lib/rehab/actions";
@@ -41,21 +40,24 @@ export default function HistoryPage() {
       const { start: startDate, end: endDate } = weekRangeFromDate(today);
 
       let weekLogs: ExerciseLog[] = [];
-      let logDates: string[] = [];
       let medicalImages: MedicalImage[] = [];
       let prescription: Prescription | null = null;
 
-      const [logsRes, datesRes, presRes, imgRes] = await Promise.allSettled([
+      // getWeekLogDates는 weekLogs와 동일 테이블·동일 범위를 중복 조회하므로 제거.
+      // 기록 날짜는 weekLogs에서 로컬로 추출한다.
+      const [logsRes, presRes, imgRes] = await Promise.allSettled([
         getExerciseLogs(userId, startDate, endDate),
-        getWeekLogDates(userId, startDate, endDate),
         getPrescriptionByPatient(userId),
-        getMedicalImages(userId),
+        getMedicalImages(userId, { limit: 60 }),
       ]);
 
       if (logsRes.status === "fulfilled") weekLogs = logsRes.value;
-      if (datesRes.status === "fulfilled") logDates = datesRes.value;
       if (presRes.status === "fulfilled") prescription = presRes.value;
       if (imgRes.status === "fulfilled") medicalImages = imgRes.value;
+
+      const logDates = Array.from(
+        new Set(weekLogs.map((l) => l.performed_at))
+      );
 
       if (cancelled) return;
       setData({
