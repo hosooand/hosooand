@@ -2,12 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  getPrescriptionByPatient,
-  getWeeklyStats,
-  getTodayLogs,
-  getWeeklyExerciseLogs,
-} from "@/lib/rehab/actions";
+import { getMemberDashboardBundle } from "@/lib/rehab/actions";
 import { useDashboardSession } from "../_components/DashboardSessionContext";
 import RehabDashboardClient from "./RehabDashboardClient";
 import type { Prescription } from "@/types/rehab";
@@ -46,22 +41,14 @@ export default function RehabPage() {
       let weeklyChartData14: WeeklyChartData[] = [];
 
       try {
-        const [pres, stats, todayLogs, weekly7, weekly14] = await Promise.all([
-          getPrescriptionByPatient(userId),
-          getWeeklyStats(userId),
-          getTodayLogs(userId),
-          getWeeklyExerciseLogs(userId, 7),
-          getWeeklyExerciseLogs(userId, 14),
-        ]);
+        const bundle = await getMemberDashboardBundle(userId);
 
-        prescription = pres;
-        weeklyCount = stats.totalSessions;
-        avgPain = stats.avgPain;
-        todayExerciseIds = todayLogs
-          .map((l) => l.exercise_id)
-          .filter(Boolean) as string[];
-        weeklyChartData7 = weekly7;
-        weeklyChartData14 = weekly14;
+        prescription = bundle.prescription;
+        weeklyCount = bundle.weeklyCount;
+        avgPain = bundle.avgPain;
+        todayExerciseIds = bundle.todayExerciseIds;
+        weeklyChartData7 = bundle.weeklyChartData7;
+        weeklyChartData14 = bundle.weeklyChartData14;
       } catch {
         // DB tables may not exist yet
       }

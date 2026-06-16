@@ -626,6 +626,79 @@ export async function getTodayLogs(
   return getExerciseLogs(patientId, today, today);
 }
 
+export interface MemberDashboardBundle {
+  prescription: Prescription | null;
+  weeklyCount: number;
+  avgPain: number;
+  todayExerciseIds: string[];
+  weeklyChartData7: WeeklyChartData[];
+  weeklyChartData14: WeeklyChartData[];
+}
+
+/**
+ * 환자(member) 대시보드: 처방 + 운동 로그를 1회 경량 조회로 모든 통계/차트 구성.
+ * 기존엔 getWeeklyStats·getTodayLogs·getWeeklyExerciseLogs(7/14)가 겹치는 구간을
+ * 무거운 join(exercise·body_part)으로 각각 중복 조회 → 본인 로그를 한 번만,
+ * 필요한 컬럼만 가져와 로컬에서 계산한다. (RLS + patient_id로 본인 데이터만)
+ */
+export async function getMemberDashboardBundle(
+  patientId: string
+): Promise<MemberDashboardBundle> {
+  return withError("대시보드 요약 조회", async () => {
+    const supabase = await createServerSupabaseClient();
+
+    const todayStr = new Date().toLocaleDateString("en-CA");
+    const { start: monday, end: sunday } = weekRangeFromDate(todayStr);
+    const last14Start = addDaysDateOnly(todayStr, -13);
+
+    // 이번 주(월~일)와 최근 14일을 모두 포함하는 최소 구간
+    const rangeStart = monday < last14Start ? monday : last14Start;
+    const rangeEnd = sunday > todayStr ? sunday : todayStr;
+
+    const [prescription, logsRes] = await Promise.all([
+      getPrescriptionByPatient(patientId),
+      supabase
+        .from("exercise_logs")
+        .select("performed_at, pain_level, exercise_count, exercise_id")
+        .eq("patient_id", patientId)
+        .gte("performed_at", normalizeDateOnlyInput(rangeStart))
+        .lte("performed_at", normalizeDateOnlyInput(rangeEnd)),
+    ]);
+
+    const logs = (logsRes.data ?? []) as unknown as ExerciseLog[];
+
+    const weekLogs = logs.filter(
+      (l) => l.performed_at >= monday && l.performed_at <= sunday
+    );
+    const weeklyCount = new Set(weekLogs.map((l) => l.performed_at)).size;
+    const avgPain =
+      weekLogs.length > 0
+        ? Math.round(
+            (weekLogs.reduce((s, l) => s + (l.pain_level ?? 0), 0) /
+              weekLogs.length) *
+              10
+          ) / 10
+        : 0;
+
+    const todayExerciseIds = logs
+      .filter((l) => l.performed_at === todayStr)
+      .map((l) => l.exercise_id)
+      .filter((id): id is string => Boolean(id));
+
+    const weeklyChartData7 = weeklyChartFromLogs(logs, monday, sunday);
+    const weeklyChartData14 = weeklyChartLast14FromLogs(logs, todayStr);
+
+    return {
+      prescription,
+      weeklyCount,
+      avgPain,
+      todayExerciseIds,
+      weeklyChartData7,
+      weeklyChartData14,
+    };
+  });
+}
+
 export async function getWeeklyStats(patientId: string) {
   const todayStr = new Date().toLocaleDateString('en-CA')
   const { start: startDate, end: endDate } = weekRangeFromDate(todayStr)
