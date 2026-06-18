@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { DailyLogSchema, type DailyLogFormValues } from '@/lib/validations/diary'
+import type { FieldErrors } from 'react-hook-form'
 import type { DailyLog } from '@/types/diary'
 import DailyMealPanel, { type MealPanelEntry } from './DailyMealPanel'
 import ConditionPicker from './ConditionPicker'
@@ -190,15 +191,52 @@ export default function DiaryClient({ date, initialLog, profile, userId }: Props
               }
             : null,
         })
-        await upsertDailyLog({ ...values, date, meal_entries: mealEntries })
+        await upsertDailyLog({
+          ...values,
+          date,
+          meal_image_url: values.meal_image_url || null,
+          meal_entries: mealEntries,
+        })
         // 저장 성공 → 현재 값을 새로운 기준값으로 reset → isDirty=false
         reset(values, { keepValues: true })
         setMealEntriesDirty(false)
         setToast({ message: '오늘의 기록이 저장됐어요 ✅', type: 'success' })
       } catch (e) {
         console.error(e)
-        setToast({ message: '저장에 실패했어요. 다시 시도해주세요 ❌', type: 'error' })
+        const detail = e instanceof Error && e.message ? `\n(${e.message})` : ''
+        setToast({
+          message: `저장에 실패했어요. 다시 시도해주세요 ❌${detail}`,
+          type: 'error',
+        })
       }
+    })
+  }
+
+  // 폼 검증(zod) 실패 시: 기존엔 onSubmit이 호출되지 않아 버튼을 눌러도
+  // 아무 반응이 없었음(조용히 막힘). 어떤 항목이 문제인지 사용자에게 알린다.
+  const FIELD_LABELS: Record<string, string> = {
+    meal_image_url: '식단 사진',
+    meal_analysis: '식단 분석',
+    water_intake: '수분 섭취',
+    sleep_hours: '수면',
+    exercise_logs: '운동 기록',
+    condition: '컨디션',
+    memo: '메모',
+    date: '날짜',
+  }
+
+  function onInvalid(formErrors: FieldErrors<DailyLogFormValues>) {
+    console.error('[DiaryClient] 저장 검증 실패', formErrors)
+    const firstKey = Object.keys(formErrors)[0]
+    const label = firstKey ? FIELD_LABELS[firstKey] ?? firstKey : null
+    const firstMsg = firstKey
+      ? (formErrors as Record<string, { message?: string } | undefined>)[firstKey]?.message
+      : undefined
+    setToast({
+      message: label
+        ? `'${label}' 항목을 확인해주세요 ❌${firstMsg ? `\n(${firstMsg})` : ''}`
+        : '입력값에 문제가 있어 저장하지 못했어요. 내용을 확인해주세요 ❌',
+      type: 'error',
     })
   }
 
@@ -270,7 +308,7 @@ export default function DiaryClient({ date, initialLog, profile, userId }: Props
 
           <button
             type="button"
-            onClick={handleSubmit(onSubmit)}
+            onClick={handleSubmit(onSubmit, onInvalid)}
             disabled={isPending}
             className={`relative flex items-center gap-1.5 px-4 py-2 rounded-full text-[13px] font-semibold
               transition-all duration-200 text-white disabled:opacity-60
@@ -290,7 +328,7 @@ export default function DiaryClient({ date, initialLog, profile, userId }: Props
         </div>
       </div>
 
-      <form onSubmit={handleSubmit(onSubmit)}
+      <form onSubmit={handleSubmit(onSubmit, onInvalid)}
         className="max-w-2xl mx-auto px-4 pb-32 space-y-4 pt-5">
 
         {/* 01 식단 — key={date}로 날짜 바뀌면 완전 리마운트 보장 */}
