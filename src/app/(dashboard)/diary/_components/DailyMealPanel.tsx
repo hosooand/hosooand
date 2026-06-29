@@ -40,7 +40,7 @@ export interface MealPanelEntry {
   intake_ratio?: IntakeRatio
 }
 
-const DEFAULT_GOAL_KCAL = 1500
+const DEFAULT_GOAL_KCAL = 1200
 
 function resolveGoalKcal(targetCalories: number | null | undefined): number {
   return targetCalories != null && targetCalories > 0 ? targetCalories : DEFAULT_GOAL_KCAL

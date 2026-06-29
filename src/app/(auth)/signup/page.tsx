@@ -78,39 +78,47 @@ export default function SignupPage() {
     if (!validate()) return
     setLoading(true)
 
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password: pw,
-      options: {
-        data: { name, role: 'member' },
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-      },
-    })
-
-    if (error) {
-      setErrors({ global: error.message })
-      setLoading(false)
-      return
-    }
-
-    if (data.user) {
-      await supabase.from('profiles').insert({
-        id: data.user.id,
-        name,
-        role: 'member',
-      })
-    }
-
-    // 가입 직후 남은 세션/쿠키로 인해 바로 로그인 시 오인증이 나는 경우 방지
     try {
-      await supabase.auth.signOut()
-    } catch (e) {
-      console.error(e)
-    }
+      console.log('signUp 시작', email)
 
-    setLoading(false)
-    router.push('/login')
-    router.refresh()
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password: pw,
+        options: {
+          data: { name, role: 'member' },
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+        },
+      })
+
+      if (error) {
+        setErrors({ global: error.message })
+        return
+      }
+
+      if (data.user) {
+        await supabase.from('profiles').insert({
+          id: data.user.id,
+          name,
+          role: 'member',
+        })
+      }
+
+      // 가입 직후 남은 세션/쿠키로 인해 바로 로그인 시 오인증이 나는 경우 방지
+      try {
+        await supabase.auth.signOut()
+      } catch (e) {
+        console.error(e)
+      }
+
+      router.push('/login')
+      router.refresh()
+    } catch (error) {
+      setErrors({
+        global: error instanceof Error ? error.message : '회원가입 중 오류가 발생했습니다',
+      })
+    } finally {
+      setLoading(false)
+    }
   }
 
   const inputClass = (err?: string) =>

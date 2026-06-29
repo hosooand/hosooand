@@ -528,7 +528,7 @@ export default function AdminClient({ members: initialMembers, staffId, initialN
                     inputMode="numeric"
                     value={editTargetCalories}
                     onChange={e => setEditTargetCalories(e.target.value)}
-                    placeholder="예: 1500"
+                    placeholder="예: 1200"
                     className="w-full h-[38px] px-3 rounded-[8px] border border-gray-200
                       text-[13px] outline-none focus:border-pink-400 transition-all bg-white
                       [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none
