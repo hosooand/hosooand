@@ -365,6 +365,14 @@ function MealCard({ userId, date, mealType, entry, onChange, dayTotalCalories, g
     onChange({ ...entry, time })
   }
 
+  // 텍스트를 입력만 하고 AI 분석을 누르지 않은 채 저장하면 content가 부모로 전파되지
+  // 않아 meal_entries가 비어 저장되던 문제 → 포커스가 빠질 때 텍스트를 반영한다.
+  function handleContentBlur() {
+    const trimmed = content.trim()
+    if (trimmed === (entry.content ?? '')) return
+    onChange({ ...entry, meal_type: mealType, content: trimmed || null })
+  }
+
   function handleIntakeRatio(ratio: IntakeRatio) {
     if (!entry.analysis) return
     const base = baseMealCalories(entry.analysis)
@@ -521,6 +529,7 @@ function MealCard({ userId, date, mealType, entry, onChange, dayTotalCalories, g
                   <textarea
                     value={content}
                     onChange={(e) => setContent(e.target.value)}
+                    onBlur={handleContentBlur}
                     rows={3}
                     maxLength={500}
                     placeholder={`${mealType}에 먹은 음식을 입력하세요\n예) 현미밥 1공기, 된장국, 김치`}

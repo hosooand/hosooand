@@ -38,6 +38,47 @@ export async function getDailyLogSummaries(days = 30): Promise<DailyLogSummary[]
   }))
 }
 
+// meal_entries(MealPanelEntry: meal_type/content/…)를 레거시 meals 컬럼
+// (MealEntry: type/text/…) 형태로 변환. 한글 식사명은 영문 키로 매핑한다.
+const MEAL_TYPE_TO_EN: Record<string, string> = {
+  아침: 'breakfast',
+  점심: 'lunch',
+  저녁: 'dinner',
+  간식: 'snack',
+}
+
+function toMealsColumn(rawEntries: unknown): Array<{
+  type: string
+  time: string | null
+  image_url: string | null
+  text: string | null
+  analysis: unknown
+}> {
+  if (!Array.isArray(rawEntries)) return []
+  return rawEntries
+    .map((e) => {
+      const entry = (e ?? {}) as {
+        meal_type?: string
+        type?: string
+        time?: string | null
+        image_url?: string | null
+        content?: string | null
+        text?: string | null
+        analysis?: unknown
+      }
+      const rawType = entry.meal_type ?? entry.type ?? ''
+      return {
+        type: MEAL_TYPE_TO_EN[rawType] ?? rawType,
+        time: entry.time ?? null,
+        image_url: entry.image_url ?? null,
+        text: entry.content ?? entry.text ?? null,
+        analysis: entry.analysis ?? null,
+      }
+    })
+    // 실제 데이터(텍스트·이미지·분석)가 있는 식사만 저장 (빈 슬롯 제외)
+    .filter((m) => m.text || m.image_url || m.analysis)
+}
+
 export async function upsertDailyLog(
   values: DailyLogFormValues & { date: string; meal_entries?: unknown }
 ): Promise<DailyLog> {
@@ -89,6 +130,22 @@ export async function upsertDailyLog(
       payload_date: dateStr,
     })
     throw new Error(error.message)
+  }
+
+  // 레거시 meals 컬럼 동기화 — best effort.
+  // 컬럼이 존재하지 않는 환경에서 실패해도 이미 성공한 저장(meal_entries)은 유지한다.
+  try {
+    const meals = toMealsColumn(payload.meal_entries)
+    const { error: mealsErr } = await supabase
+      .from('daily_logs')
+      .update({ meals })
+      .eq('user_id', user.id)
+      .eq('date', dateStr)
+    if (mealsErr) {
+      console.warn('[upsertDailyLog] meals 컬럼 동기화 건너뜀:', mealsErr.message)
+    }
+  } catch (e) {
+    console.warn('[upsertDailyLog] meals 컬럼 동기화 예외:', e)
   }
 
   const returnedMealEntries = (data as unknown as { meal_entries?: unknown }).meal_entries
