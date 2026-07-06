@@ -1107,17 +1107,29 @@ export default function HistoryClient({
             >
               ✕
             </button>
-            <img
-              src={imageModal.image_url}
-              alt="확대 이미지"
+            <div
               style={{
                 width: "100%",
                 maxHeight: "80vh",
-                objectFit: "contain",
+                overflow: "auto",
+                WebkitOverflowScrolling: "touch",
+                // 모바일 핀치줌(확대/축소) + 확대 후 스크롤 허용
+                touchAction: "pan-x pan-y pinch-zoom",
                 borderRadius: 16,
-                display: "block",
               }}
-            />
+            >
+              <img
+                src={imageModal.image_url}
+                alt="확대 이미지"
+                style={{
+                  width: "100%",
+                  height: "auto",
+                  objectFit: "contain",
+                  borderRadius: 16,
+                  display: "block",
+                }}
+              />
+            </div>
             <div
               style={{
                 marginTop: 12,

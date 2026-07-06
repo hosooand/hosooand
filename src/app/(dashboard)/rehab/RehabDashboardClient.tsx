@@ -31,6 +31,102 @@ function resolveAvatarSrc(avatar?: string | null): string {
   return (avatar && AVATAR_SRC[avatar]) || "/duck.png";
 }
 
+// 스카이블루 테마 숫자 스테퍼 (횟수/세트 공용)
+function NumberStepper({
+  label,
+  value,
+  min,
+  max,
+  unit,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  unit: string;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <p
+        style={{
+          fontSize: 12,
+          fontWeight: 700,
+          color: "#475569",
+          margin: 0,
+          marginBottom: 10,
+        }}
+      >
+        {label}
+      </p>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 16,
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => onChange(Math.max(min, value - 1))}
+          disabled={value <= min}
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: "50%",
+            backgroundColor: "#f1f5f9",
+            border: "none",
+            fontSize: 18,
+            cursor: value <= min ? "not-allowed" : "pointer",
+            color: "#64748b",
+            opacity: value <= min ? 0.5 : 1,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          −
+        </button>
+        <span
+          style={{
+            fontSize: 24,
+            fontWeight: 800,
+            color: "#0f172a",
+            minWidth: 48,
+            textAlign: "center",
+          }}
+        >
+          {value}
+        </span>
+        <button
+          type="button"
+          onClick={() => onChange(Math.min(max, value + 1))}
+          disabled={value >= max}
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: "50%",
+            backgroundColor: "#e0f2fe",
+            border: "none",
+            fontSize: 18,
+            cursor: value >= max ? "not-allowed" : "pointer",
+            color: "#0ea5e9",
+            opacity: value >= max ? 0.5 : 1,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          +
+        </button>
+        <span style={{ fontSize: 14, color: "#64748b" }}>{unit}</span>
+      </div>
+    </div>
+  );
+}
+
 const cardStyle: React.CSSProperties = {
   backgroundColor: "#ffffff",
   borderRadius: 20,
@@ -70,7 +166,8 @@ export default function RehabDashboardClient({
     null
   );
   const [painLevel, setPainLevel] = useState(5);
-  const [exerciseCount, setExerciseCount] = useState(10);
+  const [reps, setReps] = useState(10);
+  const [sets, setSets] = useState(1);
   const [isPending, startTransition] = useTransition();
   const [leafletModal, setLeafletModal] = useState<{
     images: string[];
@@ -120,10 +217,11 @@ export default function RehabDashboardClient({
   };
 
   const handleStartLog = (exerciseId: string) => {
-    if (completedIds.has(exerciseId)) return;
+    // 완료된 운동도 다시 열어 수정 가능 (createExerciseLog가 upsert라 같은 날짜면 덮어씀)
     setLoggingExerciseId(exerciseId);
     setPainLevel(5);
-    setExerciseCount(10);
+    setReps(10);
+    setSets(1);
   };
 
   const handleSaveLog = () => {
@@ -134,7 +232,8 @@ export default function RehabDashboardClient({
           prescription_id: prescription.id,
           exercise_id: loggingExerciseId,
           pain_level: painLevel,
-          exercise_count: exerciseCount,
+          // 기존 exercise_count 컬럼과 호환: 총 반복수 = 횟수 × 세트
+          exercise_count: reps * sets,
         });
         setCompletedIds((prev) => new Set(prev).add(loggingExerciseId));
         setLoggingExerciseId(null);
@@ -401,7 +500,7 @@ export default function RehabDashboardClient({
           }}
         >
           <p style={{ fontSize: 11, color: "#64748b", marginBottom: 4, marginTop: 0 }}>
-            현재 단계
+            현재 운동 단계
           </p>
           <p
             style={{
@@ -428,7 +527,7 @@ export default function RehabDashboardClient({
           }}
         >
           <p style={{ fontSize: 11, color: "#64748b", marginBottom: 4, marginTop: 0 }}>
-            평균 통증
+            운동 시 평균 통증
           </p>
           <p
             style={{
@@ -608,7 +707,7 @@ export default function RehabDashboardClient({
                     )}
                   </div>
 
-                  {!isDone && (
+                  {!isLogging && (
                     <button
                       type="button"
                       onClick={(e) => {
@@ -620,14 +719,14 @@ export default function RehabDashboardClient({
                         borderRadius: 10,
                         fontSize: 11,
                         fontWeight: 700,
-                        border: "none",
                         cursor: "pointer",
-                        backgroundColor: "#0EA5E9",
-                        color: "#fff",
+                        border: isDone ? "1.5px solid #0ea5e9" : "none",
+                        backgroundColor: isDone ? "#ffffff" : "#0EA5E9",
+                        color: isDone ? "#0ea5e9" : "#fff",
                         flexShrink: 0,
                       }}
                     >
-                      완료
+                      {isDone ? "수정하기" : "완료"}
                     </button>
                   )}
                 </div>
@@ -706,88 +805,33 @@ export default function RehabDashboardClient({
                       1: 거의 없음 ←→ 10: 극심한 통증
                     </p>
 
+                    <NumberStepper
+                      label="횟수"
+                      value={reps}
+                      min={1}
+                      max={15}
+                      unit="회"
+                      onChange={setReps}
+                    />
+                    <NumberStepper
+                      label="세트"
+                      value={sets}
+                      min={1}
+                      max={10}
+                      unit="세트"
+                      onChange={setSets}
+                    />
                     <p
                       style={{
-                        fontSize: 12,
-                        fontWeight: 700,
-                        color: "#475569",
+                        fontSize: 11,
+                        color: "#94a3b8",
+                        textAlign: "center",
                         margin: 0,
-                        marginBottom: 10,
-                      }}
-                    >
-                      운동 횟수
-                    </p>
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        gap: 16,
                         marginBottom: 14,
                       }}
                     >
-                      <button
-                        onClick={() =>
-                          setExerciseCount((prev) => Math.max(1, prev - 1))
-                        }
-                        style={{
-                          width: 36,
-                          height: 36,
-                          borderRadius: "50%",
-                          backgroundColor: "#f1f5f9",
-                          border: "none",
-                          fontSize: 18,
-                          cursor: "pointer",
-                          color: "#64748b",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                        }}
-                      >
-                        −
-                      </button>
-                      <span
-                        style={{
-                          fontSize: 24,
-                          fontWeight: 800,
-                          color: "#0f172a",
-                          minWidth: 48,
-                          textAlign: "center",
-                        }}
-                      >
-                        {exerciseCount}
-                      </span>
-                      <button
-                        onClick={() =>
-                          setExerciseCount((prev) =>
-                            Math.min(99, prev + 1)
-                          )
-                        }
-                        style={{
-                          width: 36,
-                          height: 36,
-                          borderRadius: "50%",
-                          backgroundColor: "#e0f2fe",
-                          border: "none",
-                          fontSize: 18,
-                          cursor: "pointer",
-                          color: "#0EA5E9",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                        }}
-                      >
-                        +
-                      </button>
-                      <span
-                        style={{
-                          fontSize: 14,
-                          color: "#64748b",
-                        }}
-                      >
-                        회
-                      </span>
-                    </div>
+                      총 {reps * sets}회 ({reps}회 × {sets}세트)
+                    </p>
 
                     <div style={{ display: "flex", gap: 8 }}>
                       <button
@@ -823,7 +867,11 @@ export default function RehabDashboardClient({
                           opacity: isPending ? 0.5 : 1,
                         }}
                       >
-                        {isPending ? "저장 중..." : "기록 저장"}
+                        {isPending
+                          ? "저장 중..."
+                          : isDone
+                            ? "수정 저장"
+                            : "기록 저장"}
                       </button>
                     </div>
                   </div>
