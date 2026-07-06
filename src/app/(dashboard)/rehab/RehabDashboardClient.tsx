@@ -957,92 +957,102 @@ export default function RehabDashboardClient({
             ✕
           </button>
 
+          {leafletModal.images.length > 1 && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setLeafletModal((m) =>
+                  m
+                    ? {
+                        ...m,
+                        index:
+                          (m.index - 1 + m.images.length) % m.images.length,
+                      }
+                    : null
+                );
+              }}
+              style={{
+                position: "absolute",
+                left: 8,
+                top: "50%",
+                transform: "translateY(-50%)",
+                width: 44,
+                height: 44,
+                borderRadius: "50%",
+                border: "none",
+                backgroundColor: "rgba(255,255,255,0.2)",
+                color: "#fff",
+                fontSize: 22,
+                cursor: "pointer",
+                zIndex: 2,
+              }}
+              aria-label="이전 이미지"
+            >
+              ‹
+            </button>
+          )}
+
           <div
             onClick={(e) => e.stopPropagation()}
             style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 12,
-              maxWidth: "100%",
-              padding: "0 56px",
+              width: "100%",
+              maxWidth: 900,
+              maxHeight: "80vh",
+              overflow: "auto",
+              WebkitOverflowScrolling: "touch",
+              // 모바일 핀치줌(확대/축소) + 스크롤 허용
+              touchAction: "pan-x pan-y pinch-zoom",
+              borderRadius: 12,
               boxSizing: "border-box",
             }}
           >
-            {leafletModal.images.length > 1 && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setLeafletModal((m) =>
-                    m
-                      ? {
-                          ...m,
-                          index:
-                            (m.index - 1 + m.images.length) %
-                            m.images.length,
-                        }
-                      : null
-                  );
-                }}
-                style={{
-                  width: 44,
-                  height: 44,
-                  borderRadius: "50%",
-                  border: "none",
-                  backgroundColor: "rgba(255,255,255,0.2)",
-                  color: "#fff",
-                  fontSize: 22,
-                  cursor: "pointer",
-                  flexShrink: 0,
-                }}
-                aria-label="이전 이미지"
-              >
-                ‹
-              </button>
-            )}
             <img
               src={leafletModal.images[leafletModal.index]}
               alt={`리플렛 ${leafletModal.index + 1}/${leafletModal.images.length}`}
               style={{
-                maxWidth: "90%",
-                maxHeight: "70vh",
-                objectFit: "contain",
-                borderRadius: 12,
+                width: "100%",
+                height: "auto",
                 display: "block",
+                borderRadius: 12,
               }}
             />
-            {leafletModal.images.length > 1 && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setLeafletModal((m) =>
-                    m
-                      ? {
-                          ...m,
-                          index: (m.index + 1) % m.images.length,
-                        }
-                      : null
-                  );
-                }}
-                style={{
-                  width: 44,
-                  height: 44,
-                  borderRadius: "50%",
-                  border: "none",
-                  backgroundColor: "rgba(255,255,255,0.2)",
-                  color: "#fff",
-                  fontSize: 22,
-                  cursor: "pointer",
-                  flexShrink: 0,
-                }}
-                aria-label="다음 이미지"
-              >
-                ›
-              </button>
-            )}
           </div>
+
+          {leafletModal.images.length > 1 && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setLeafletModal((m) =>
+                  m
+                    ? {
+                        ...m,
+                        index: (m.index + 1) % m.images.length,
+                      }
+                    : null
+                );
+              }}
+              style={{
+                position: "absolute",
+                right: 8,
+                top: "50%",
+                transform: "translateY(-50%)",
+                width: 44,
+                height: 44,
+                borderRadius: "50%",
+                border: "none",
+                backgroundColor: "rgba(255,255,255,0.2)",
+                color: "#fff",
+                fontSize: 22,
+                cursor: "pointer",
+                zIndex: 2,
+              }}
+              aria-label="다음 이미지"
+            >
+              ›
+            </button>
+          )}
 
           {leafletModal.images.length > 1 && (
             <p
