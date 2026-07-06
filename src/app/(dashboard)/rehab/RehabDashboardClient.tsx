@@ -19,6 +19,18 @@ const LEVEL_LABELS: Record<ExerciseLevel, string> = {
   3: "3단계",
 };
 
+// 마이페이지 아바타 선택값(profiles.avatar) → 이미지 경로 매핑
+const AVATAR_SRC: Record<string, string> = {
+  duck: "/duck.png",
+  "duck-run": "/duck-run.png",
+  "duck-pilates": "/duck-pilates.png",
+  "duck-gym": "/duck-gym.png",
+};
+
+function resolveAvatarSrc(avatar?: string | null): string {
+  return (avatar && AVATAR_SRC[avatar]) || "/duck.png";
+}
+
 const cardStyle: React.CSSProperties = {
   backgroundColor: "#ffffff",
   borderRadius: 20,
@@ -30,6 +42,7 @@ const cardStyle: React.CSSProperties = {
 
 interface Props {
   name: string;
+  avatar?: string | null;
   prescription: Prescription | null;
   weeklyCount: number;
   avgPain: number;
@@ -40,6 +53,7 @@ interface Props {
 
 export default function RehabDashboardClient({
   name,
+  avatar,
   prescription,
   weeklyCount,
   avgPain,
@@ -47,6 +61,7 @@ export default function RehabDashboardClient({
   weeklyChartData7,
   weeklyChartData14,
 }: Props) {
+  const avatarSrc = resolveAvatarSrc(avatar);
   const [exerciseChartDays, setExerciseChartDays] = useState<ChartDays>(7);
   const [completedIds, setCompletedIds] = useState<Set<string>>(
     new Set(todayLogExerciseIds)
@@ -324,7 +339,7 @@ export default function RehabDashboardClient({
         }}
       >
         <img
-          src="/duck-run.png"
+          src={avatarSrc}
           alt="통통이"
           style={{ width: 44, height: 44, objectFit: "contain" }}
         />

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 import { getMemberDashboardBundle } from "@/lib/rehab/actions";
 import { useDashboardSession } from "../_components/DashboardSessionContext";
 import RehabDashboardClient from "./RehabDashboardClient";
@@ -10,6 +11,7 @@ import type { WeeklyChartData } from "@/lib/rehab/actions";
 
 interface PageData {
   name: string;
+  avatar: string;
   prescription: Prescription | null;
   weeklyCount: number;
   avgPain: number;
@@ -40,8 +42,16 @@ export default function RehabPage() {
       let weeklyChartData7: WeeklyChartData[] = [];
       let weeklyChartData14: WeeklyChartData[] = [];
 
+      // 아바타는 세션 컨텍스트(SSR 1회 로드)라 마이페이지 변경이 반영 안 됨 →
+      // 홈 진입 시마다 profiles.avatar를 최신으로 다시 읽어 실시간 반영한다.
+      let avatarValue = profile.avatar || "duck";
+
       try {
-        const bundle = await getMemberDashboardBundle(userId);
+        const supabase = createClient();
+        const [bundle, profileRes] = await Promise.all([
+          getMemberDashboardBundle(userId),
+          supabase.from("profiles").select("avatar").eq("id", userId).single(),
+        ]);
 
         prescription = bundle.prescription;
         weeklyCount = bundle.weeklyCount;
@@ -49,6 +59,8 @@ export default function RehabPage() {
         todayExerciseIds = bundle.todayExerciseIds;
         weeklyChartData7 = bundle.weeklyChartData7;
         weeklyChartData14 = bundle.weeklyChartData14;
+
+        if (profileRes.data?.avatar) avatarValue = profileRes.data.avatar;
       } catch {
         // DB tables may not exist yet
       }
@@ -56,6 +68,7 @@ export default function RehabPage() {
       if (cancelled) return;
       setData({
         name: profile.name || "환자",
+        avatar: avatarValue,
         prescription,
         weeklyCount,
         avgPain,
@@ -77,6 +90,7 @@ export default function RehabPage() {
   return (
     <RehabDashboardClient
       name={data.name}
+      avatar={data.avatar}
       prescription={data.prescription}
       weeklyCount={data.weeklyCount}
       avgPain={data.avgPain}
