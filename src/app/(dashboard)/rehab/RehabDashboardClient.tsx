@@ -31,6 +31,48 @@ function resolveAvatarSrc(avatar?: string | null): string {
   return (avatar && AVATAR_SRC[avatar]) || "/duck.png";
 }
 
+// 호수앤의 한마디 — 날짜 기준으로 매일 다른 문구 표시
+const DAILY_MESSAGES = [
+  "오늘도 한 걸음, 건강한 내일을 만들어요 💪",
+  "작은 운동이 큰 변화를 만듭니다",
+  "통증 없는 하루를 향해 함께해요",
+  "꾸준함이 최고의 치료입니다",
+  "오늘 운동, 내일의 나에게 선물하세요",
+  "몸이 보내는 신호에 귀 기울여보세요",
+  "천천히, 하지만 포기하지 않게",
+  "오늘도 잘 오셨어요, 시작이 반입니다",
+  "운동은 몸을 깨우는 가장 좋은 방법",
+  "회복의 여정, 오늘도 응원합니다",
+  "작은 움직임이 큰 회복을 만들어요",
+  "오늘 하루도 몸과 마음 모두 건강하게",
+  "통증과 싸우지 말고, 몸을 돌봐주세요",
+  "오늘의 노력이 내일의 편안함이 됩니다",
+  "건강한 몸은 행복한 삶의 시작이에요",
+  "무리하지 않게, 하지만 멈추지 않게",
+  "오늘도 운동 기록 남기는 거 잊지 마세요",
+  "매일 조금씩, 분명히 달라지고 있어요",
+  "몸이 회복되는 소리가 들리나요?",
+  "포기하지 않는 당신이 대단합니다",
+  "오늘의 운동이 내 몸을 지킵니다",
+  "통증이 줄어드는 그날까지 함께해요",
+  "건강은 가장 소중한 자산입니다",
+  "오늘도 최선을 다한 당신을 응원해요",
+  "몸을 믿으세요, 충분히 회복할 수 있어요",
+  "꾸준한 운동이 통증을 이깁니다",
+  "오늘 하루도 건강하게 마무리해요",
+  "당신의 회복을 호수앤이 함께합니다 🦆",
+];
+
+function getDailyMessage(): string {
+  const today = new Date();
+  const index =
+    (today.getFullYear() * 366 +
+      today.getMonth() * 31 +
+      today.getDate()) %
+    DAILY_MESSAGES.length;
+  return DAILY_MESSAGES[index];
+}
+
 // 스카이블루 테마 숫자 스테퍼 (횟수/세트 공용)
 function NumberStepper({
   label,
@@ -158,6 +200,7 @@ export default function RehabDashboardClient({
   weeklyChartData14,
 }: Props) {
   const avatarSrc = resolveAvatarSrc(avatar);
+  const dailyMessage = getDailyMessage();
   const [exerciseChartDays, setExerciseChartDays] = useState<ChartDays>(7);
   const [completedIds, setCompletedIds] = useState<Set<string>>(
     new Set(todayLogExerciseIds)
@@ -462,7 +505,7 @@ export default function RehabDashboardClient({
               lineHeight: 1.5,
             }}
           >
-            오늘 운동 기록했나요? 꾸준한 재활이 빠른 회복의 지름길!
+            {dailyMessage}
           </p>
         </div>
       </div>
