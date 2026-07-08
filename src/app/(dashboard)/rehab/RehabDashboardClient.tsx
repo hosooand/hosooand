@@ -794,7 +794,7 @@ export default function RehabDashboardClient({
                         marginBottom: 10,
                       }}
                     >
-                      통증 정도
+                      운동 시 평균 통증 정도
                     </p>
                     <div
                       style={{
