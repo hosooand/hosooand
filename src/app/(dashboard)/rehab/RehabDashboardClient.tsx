@@ -1032,6 +1032,10 @@ export default function RehabDashboardClient({
             alignItems: "center",
             justifyContent: "center",
             flexDirection: "column",
+            // 갤럭시 크롬 등에서 모달 전체에도 핀치줌 허용
+            overflow: "auto",
+            WebkitOverflowScrolling: "touch",
+            touchAction: "pan-x pan-y pinch-zoom",
           }}
           onClick={() => setLeafletModal(null)}
         >

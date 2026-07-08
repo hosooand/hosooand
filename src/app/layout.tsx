@@ -23,8 +23,8 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width:                'device-width',
   initialScale:         1,
-  maximumScale:         1,   // 핀치줌 방지 (앱처럼 동작)
-  userScalable:         false,
+  maximumScale:         5,    // 이미지 뷰어 핀치줌 허용 (갤럭시 크롬 대응)
+  userScalable:         true,
   themeColor:           '#EC4899',
   viewportFit:          'cover', // iPhone 노치 대응
 }
