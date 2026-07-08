@@ -655,8 +655,19 @@ export async function getMemberDashboardBundle(
     const rangeStart = monday < last14Start ? monday : last14Start;
     const rangeEnd = sunday > todayStr ? sunday : todayStr;
 
-    const [prescription, logsRes] = await Promise.all([
-      getPrescriptionByPatient(patientId),
+    // 처방(운동 포함)을 임베디드 조인 1쿼리로 가져와서 로그 쿼리와 완전 병렬화.
+    // (기존엔 getPrescriptionByPatient가 별도 클라이언트를 만들고
+    //  prescriptions → prescription_exercises를 순차로 왕복했음)
+    const [prescRes, logsRes] = await Promise.all([
+      supabase
+        .from("prescriptions")
+        .select(
+          "id, patient_id, staff_id, body_part_ids, current_level, note, status, created_at, updated_at, prescription_exercises(display_order, exercise:exercises(id, title, content_type, level, body_part_id, video_url, leaflet_images, leaflet_text, body_part:body_parts(id, name)))"
+        )
+        .eq("patient_id", patientId)
+        .eq("status", "active")
+        .limit(1)
+        .maybeSingle(),
       supabase
         .from("exercise_logs")
         .select("performed_at, pain_level, exercise_count, exercise_id")
@@ -664,6 +675,20 @@ export async function getMemberDashboardBundle(
         .gte("performed_at", normalizeDateOnlyInput(rangeStart))
         .lte("performed_at", normalizeDateOnlyInput(rangeEnd)),
     ]);
+
+    let prescription: Prescription | null = null;
+    if (prescRes.data) {
+      const raw = prescRes.data as any;
+      const exercises = (raw.prescription_exercises ?? [])
+        .slice()
+        .sort(
+          (a: any, b: any) => (a.display_order ?? 0) - (b.display_order ?? 0)
+        )
+        .map((pe: any) => pe.exercise)
+        .filter(Boolean);
+      const { prescription_exercises: _pe, ...rest } = raw;
+      prescription = { ...rest, exercises } as Prescription;
+    }
 
     const logs = (logsRes.data ?? []) as unknown as ExerciseLog[];
 
