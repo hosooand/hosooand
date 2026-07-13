@@ -19,6 +19,8 @@ export default function PatientListClient({
   const router = useRouter();
   const [inputValue, setInputValue] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
+  // 통증클리닉 환자관리: 기본은 "처방중"인 환자만 노출, 토글로 전체 보기.
+  const [showAll, setShowAll] = useState(false);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -36,7 +38,10 @@ export default function PatientListClient({
     }, 300);
   };
 
+  const prescribedCount = patients.filter((p) => p.has_prescription).length;
+
   const filtered = patients.filter((p) => {
+    if (!showAll && !p.has_prescription) return false;
     if (!debouncedQuery.trim()) return true;
     const q = debouncedQuery.toLowerCase();
     return (
@@ -72,7 +77,9 @@ export default function PatientListClient({
           marginBottom: 20,
         }}
       >
-        총 {patients.length}명의 환자
+        {showAll
+          ? `총 ${patients.length}명의 환자`
+          : `처방중 ${prescribedCount}명 · 전체 ${patients.length}명`}
       </p>
 
       {/* (b) 검색 바 */}
@@ -108,6 +115,50 @@ export default function PatientListClient({
             boxSizing: "border-box",
           }}
         />
+      </div>
+
+      {/* (b-2) 처방중/전체 필터 토글 */}
+      <div
+        style={{
+          display: "flex",
+          gap: 8,
+          padding: 4,
+          backgroundColor: "#ffffff",
+          border: "1.5px solid #e0f2fe",
+          borderRadius: 14,
+          marginBottom: 20,
+        }}
+      >
+        {[
+          { key: "prescribed", label: "처방중" },
+          { key: "all", label: "전체 보기" },
+        ].map((opt) => {
+          const active =
+            (opt.key === "all" && showAll) ||
+            (opt.key === "prescribed" && !showAll);
+          return (
+            <button
+              key={opt.key}
+              type="button"
+              onClick={() => setShowAll(opt.key === "all")}
+              style={{
+                flex: 1,
+                height: 40,
+                border: "none",
+                borderRadius: 10,
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: "pointer",
+                transition: "all 0.2s",
+                ...(active
+                  ? { backgroundColor: "#0ea5e9", color: "#ffffff" }
+                  : { backgroundColor: "transparent", color: "#94a3b8" }),
+              }}
+            >
+              {opt.label}
+            </button>
+          );
+        })}
       </div>
 
       {/* (c) 환자 카드 리스트 */}
@@ -212,12 +263,16 @@ export default function PatientListClient({
             title={
               debouncedQuery.trim()
                 ? "검색 결과가 없습니다"
-                : "등록된 환자가 없습니다"
+                : showAll
+                  ? "등록된 환자가 없습니다"
+                  : "처방중인 환자가 없습니다"
             }
             description={
               debouncedQuery.trim()
                 ? "다른 이름으로 검색해 보세요."
-                : "환자가 회원가입하면 이곳에 표시됩니다."
+                : showAll
+                  ? "환자가 회원가입하면 이곳에 표시됩니다."
+                  : "‘전체 보기’로 모든 환자를 확인할 수 있어요."
             }
           />
         </div>
