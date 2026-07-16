@@ -466,7 +466,7 @@ export default function HistoryClient({
                           marginBottom: 10,
                         }}
                       >
-                        통증 정도
+                        운동 시 통증 정도
                       </p>
                       <div
                         style={{
@@ -710,7 +710,7 @@ export default function HistoryClient({
                             marginBottom: 10,
                           }}
                         >
-                          통증 정도
+                          운동 시 통증 정도
                         </p>
                         <div
                           style={{
