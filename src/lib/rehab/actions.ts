@@ -47,6 +47,16 @@ async function withError<T>(
 const PRESCRIPTION_WITH_EXERCISES_SELECT =
   "id, patient_id, staff_id, body_part_ids, current_level, note, status, created_at, updated_at, prescription_exercises(display_order, exercise:exercises(id, title, content_type, level, body_part_id, video_url, leaflet_images, leaflet_text, body_part:body_parts(id, name)))";
 
+// ⏱️ 임시 측정용: 각 쿼리 소요시간 로깅 (원인 파악 후 제거 예정)
+async function timed<T>(label: string, run: () => PromiseLike<T>): Promise<T> {
+  const t0 = performance.now();
+  try {
+    return await run();
+  } finally {
+    console.log(`[patient-detail] ${label}: ${(performance.now() - t0).toFixed(0)}ms`);
+  }
+}
+
 // 임베디드 조인 결과(prescription_exercises 중첩)를 Prescription 형태로 매핑.
 function mapEmbeddedPrescription(raw: unknown): Prescription | null {
   if (!raw) return null;
@@ -1248,37 +1258,79 @@ export async function getPatientDetailExerciseBundle(patientId: string) {
  */
 export async function getPatientDetailBundle(patientId: string) {
   return withError("환자 상세 조회", async () => {
+    const clientT0 = performance.now();
     const supabase = await createServerSupabaseClient();
+    console.log(
+      `[patient-detail] createServerSupabaseClient: ${(performance.now() - clientT0).toFixed(0)}ms`
+    );
 
     const end = toDateOnlyString(new Date());
     const start365 = addDaysDateOnly(end, -365);
     const normStart = normalizeDateOnlyInput(start365);
     const normEnd = normalizeDateOnlyInput(end);
 
+    const parallelT0 = performance.now();
     const [patientRes, prescRes, logsRes, medicalImages, allBodyParts] =
       await Promise.all([
-        supabase
-          .from("profiles")
-          .select("id, name, member_number")
-          .eq("id", patientId)
-          .single(),
-        supabase
-          .from("prescriptions")
-          .select(PRESCRIPTION_WITH_EXERCISES_SELECT)
-          .eq("patient_id", patientId)
-          .eq("status", "active")
-          .limit(1)
-          .maybeSingle(),
-        supabase
-          .from("exercise_logs")
-          .select(EXERCISE_LOG_DETAIL_SELECT)
-          .eq("patient_id", patientId)
-          .gte("performed_at", normStart)
-          .lte("performed_at", normEnd)
-          .order("created_at", { ascending: false }),
-        getMedicalImages(patientId, { limit: 5 }),
-        getBodyParts(),
+        timed("profiles", () =>
+          supabase
+            .from("profiles")
+            .select("id, name, member_number")
+            .eq("id", patientId)
+            .single()
+        ),
+        timed("prescription", () =>
+          supabase
+            .from("prescriptions")
+            .select(PRESCRIPTION_WITH_EXERCISES_SELECT)
+            .eq("patient_id", patientId)
+            .eq("status", "active")
+            .limit(1)
+            .maybeSingle()
+        ),
+        timed("exercise_logs", () =>
+          supabase
+            .from("exercise_logs")
+            .select(EXERCISE_LOG_DETAIL_SELECT)
+            .eq("patient_id", patientId)
+            .gte("performed_at", normStart)
+            .lte("performed_at", normEnd)
+            .order("created_at", { ascending: false })
+        ),
+        // 의료이미지: DB 쿼리와 서명URL 생성을 분리 측정
+        (async () => {
+          const imgRes = await timed("medical_images(query)", () =>
+            supabase
+              .from("medical_images")
+              .select(
+                "id, patient_id, uploaded_by, image_type, body_part_id, image_url, storage_path, taken_at, description, created_at, body_part:body_parts(id, name, category, display_order)"
+              )
+              .eq("patient_id", patientId)
+              .order("taken_at", { ascending: false })
+              .limit(5)
+          );
+          const images = (imgRes.data ?? []) as unknown as MedicalImage[];
+          const signT0 = performance.now();
+          await Promise.all(
+            images.map(async (img) => {
+              if (img.storage_path) {
+                const { data: signed } = await supabase.storage
+                  .from("medical-images")
+                  .createSignedUrl(img.storage_path, 3600);
+                if (signed?.signedUrl) img.image_url = signed.signedUrl;
+              }
+            })
+          );
+          console.log(
+            `[patient-detail] signedUrls(${images.length}개): ${(performance.now() - signT0).toFixed(0)}ms`
+          );
+          return images;
+        })(),
+        timed("bodyParts", () => getBodyParts()),
       ]);
+    console.log(
+      `[patient-detail] === 병렬 블록 전체: ${(performance.now() - parallelT0).toFixed(0)}ms ===`
+    );
 
     const patient = patientRes.data
       ? {
