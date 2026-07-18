@@ -47,13 +47,19 @@ async function withError<T>(
 const PRESCRIPTION_WITH_EXERCISES_SELECT =
   "id, patient_id, staff_id, body_part_ids, current_level, note, status, created_at, updated_at, prescription_exercises(display_order, exercise:exercises(id, title, content_type, level, body_part_id, video_url, leaflet_images, leaflet_text, body_part:body_parts(id, name)))";
 
-// ⏱️ 임시 측정용: 각 쿼리 소요시간 로깅 (원인 파악 후 제거 예정)
-async function timed<T>(label: string, run: () => PromiseLike<T>): Promise<T> {
+// ⏱️ 임시 측정용: 각 쿼리 소요시간을 marks 객체에 누적 (원인 파악 후 제거 예정).
+// 개별 console.log는 Vercel 서버리스 로그에서 버퍼링/드롭될 수 있어,
+// 마지막에 단일 라인(JSON)으로 한 번에 출력한다.
+async function timedInto<T>(
+  marks: Record<string, number>,
+  label: string,
+  run: () => PromiseLike<T>
+): Promise<T> {
   const t0 = performance.now();
   try {
     return await run();
   } finally {
-    console.log(`[patient-detail] ${label}: ${(performance.now() - t0).toFixed(0)}ms`);
+    marks[label] = Math.round(performance.now() - t0);
   }
 }
 
@@ -1258,11 +1264,11 @@ export async function getPatientDetailExerciseBundle(patientId: string) {
  */
 export async function getPatientDetailBundle(patientId: string) {
   return withError("환자 상세 조회", async () => {
+    const marks: Record<string, number> = {};
+
     const clientT0 = performance.now();
     const supabase = await createServerSupabaseClient();
-    console.log(
-      `[patient-detail] createServerSupabaseClient: ${(performance.now() - clientT0).toFixed(0)}ms`
-    );
+    marks.createClient = Math.round(performance.now() - clientT0);
 
     const end = toDateOnlyString(new Date());
     const start365 = addDaysDateOnly(end, -365);
@@ -1272,14 +1278,14 @@ export async function getPatientDetailBundle(patientId: string) {
     const parallelT0 = performance.now();
     const [patientRes, prescRes, logsRes, medicalImages, allBodyParts] =
       await Promise.all([
-        timed("profiles", () =>
+        timedInto(marks, "profiles", () =>
           supabase
             .from("profiles")
             .select("id, name, member_number")
             .eq("id", patientId)
             .single()
         ),
-        timed("prescription", () =>
+        timedInto(marks, "prescription", () =>
           supabase
             .from("prescriptions")
             .select(PRESCRIPTION_WITH_EXERCISES_SELECT)
@@ -1288,7 +1294,7 @@ export async function getPatientDetailBundle(patientId: string) {
             .limit(1)
             .maybeSingle()
         ),
-        timed("exercise_logs", () =>
+        timedInto(marks, "exercise_logs", () =>
           supabase
             .from("exercise_logs")
             .select(EXERCISE_LOG_DETAIL_SELECT)
@@ -1299,7 +1305,7 @@ export async function getPatientDetailBundle(patientId: string) {
         ),
         // 의료이미지: DB 쿼리와 서명URL 생성을 분리 측정
         (async () => {
-          const imgRes = await timed("medical_images(query)", () =>
+          const imgRes = await timedInto(marks, "medical_images_query", () =>
             supabase
               .from("medical_images")
               .select(
@@ -1321,16 +1327,16 @@ export async function getPatientDetailBundle(patientId: string) {
               }
             })
           );
-          console.log(
-            `[patient-detail] signedUrls(${images.length}개): ${(performance.now() - signT0).toFixed(0)}ms`
-          );
+          marks.signedUrls = Math.round(performance.now() - signT0);
+          marks.signedUrlsCount = images.length;
           return images;
         })(),
-        timed("bodyParts", () => getBodyParts()),
+        timedInto(marks, "bodyParts", () => getBodyParts()),
       ]);
-    console.log(
-      `[patient-detail] === 병렬 블록 전체: ${(performance.now() - parallelT0).toFixed(0)}ms ===`
-    );
+    marks.parallelTotal = Math.round(performance.now() - parallelT0);
+
+    // 단일 라인으로 전체 타이밍 출력 (Vercel 로그 드롭 방지)
+    console.log("[patient-detail] timings(ms):", JSON.stringify(marks));
 
     const patient = patientRes.data
       ? {
