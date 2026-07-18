@@ -47,22 +47,6 @@ async function withError<T>(
 const PRESCRIPTION_WITH_EXERCISES_SELECT =
   "id, patient_id, staff_id, body_part_ids, current_level, note, status, created_at, updated_at, prescription_exercises(display_order, exercise:exercises(id, title, content_type, level, body_part_id, video_url, leaflet_images, leaflet_text, body_part:body_parts(id, name)))";
 
-// ⏱️ 임시 측정용: 각 쿼리 소요시간을 marks 객체에 누적 (원인 파악 후 제거 예정).
-// 개별 console.log는 Vercel 서버리스 로그에서 버퍼링/드롭될 수 있어,
-// 마지막에 단일 라인(JSON)으로 한 번에 출력한다.
-async function timedInto<T>(
-  marks: Record<string, number>,
-  label: string,
-  run: () => PromiseLike<T>
-): Promise<T> {
-  const t0 = performance.now();
-  try {
-    return await run();
-  } finally {
-    marks[label] = Math.round(performance.now() - t0);
-  }
-}
-
 // 임베디드 조인 결과(prescription_exercises 중첩)를 Prescription 형태로 매핑.
 function mapEmbeddedPrescription(raw: unknown): Prescription | null {
   if (!raw) return null;
@@ -1264,79 +1248,37 @@ export async function getPatientDetailExerciseBundle(patientId: string) {
  */
 export async function getPatientDetailBundle(patientId: string) {
   return withError("환자 상세 조회", async () => {
-    const marks: Record<string, number> = {};
-
-    const clientT0 = performance.now();
     const supabase = await createServerSupabaseClient();
-    marks.createClient = Math.round(performance.now() - clientT0);
 
     const end = toDateOnlyString(new Date());
     const start365 = addDaysDateOnly(end, -365);
     const normStart = normalizeDateOnlyInput(start365);
     const normEnd = normalizeDateOnlyInput(end);
 
-    const parallelT0 = performance.now();
     const [patientRes, prescRes, logsRes, medicalImages, allBodyParts] =
       await Promise.all([
-        timedInto(marks, "profiles", () =>
-          supabase
-            .from("profiles")
-            .select("id, name, member_number")
-            .eq("id", patientId)
-            .single()
-        ),
-        timedInto(marks, "prescription", () =>
-          supabase
-            .from("prescriptions")
-            .select(PRESCRIPTION_WITH_EXERCISES_SELECT)
-            .eq("patient_id", patientId)
-            .eq("status", "active")
-            .limit(1)
-            .maybeSingle()
-        ),
-        timedInto(marks, "exercise_logs", () =>
-          supabase
-            .from("exercise_logs")
-            .select(EXERCISE_LOG_DETAIL_SELECT)
-            .eq("patient_id", patientId)
-            .gte("performed_at", normStart)
-            .lte("performed_at", normEnd)
-            .order("created_at", { ascending: false })
-        ),
-        // 의료이미지: DB 쿼리와 서명URL 생성을 분리 측정
-        (async () => {
-          const imgRes = await timedInto(marks, "medical_images_query", () =>
-            supabase
-              .from("medical_images")
-              .select(
-                "id, patient_id, uploaded_by, image_type, body_part_id, image_url, storage_path, taken_at, description, created_at, body_part:body_parts(id, name, category, display_order)"
-              )
-              .eq("patient_id", patientId)
-              .order("taken_at", { ascending: false })
-              .limit(5)
-          );
-          const images = (imgRes.data ?? []) as unknown as MedicalImage[];
-          const signT0 = performance.now();
-          await Promise.all(
-            images.map(async (img) => {
-              if (img.storage_path) {
-                const { data: signed } = await supabase.storage
-                  .from("medical-images")
-                  .createSignedUrl(img.storage_path, 3600);
-                if (signed?.signedUrl) img.image_url = signed.signedUrl;
-              }
-            })
-          );
-          marks.signedUrls = Math.round(performance.now() - signT0);
-          marks.signedUrlsCount = images.length;
-          return images;
-        })(),
-        timedInto(marks, "bodyParts", () => getBodyParts()),
+        supabase
+          .from("profiles")
+          .select("id, name, member_number")
+          .eq("id", patientId)
+          .single(),
+        supabase
+          .from("prescriptions")
+          .select(PRESCRIPTION_WITH_EXERCISES_SELECT)
+          .eq("patient_id", patientId)
+          .eq("status", "active")
+          .limit(1)
+          .maybeSingle(),
+        supabase
+          .from("exercise_logs")
+          .select(EXERCISE_LOG_DETAIL_SELECT)
+          .eq("patient_id", patientId)
+          .gte("performed_at", normStart)
+          .lte("performed_at", normEnd)
+          .order("created_at", { ascending: false }),
+        getMedicalImages(patientId, { limit: 5 }),
+        getBodyParts(),
       ]);
-    marks.parallelTotal = Math.round(performance.now() - parallelT0);
-
-    // 단일 라인으로 전체 타이밍 출력 (Vercel 로그 드롭 방지)
-    console.log("[patient-detail] timings(ms):", JSON.stringify(marks));
 
     const patient = patientRes.data
       ? {
