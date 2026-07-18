@@ -2,8 +2,7 @@
 
 import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
-import { getBodyParts, getPrescriptionByPatient } from "@/lib/rehab/actions";
+import { getPrescribeBundle } from "@/lib/rehab/actions";
 import { useDashboardSession } from "../../_components/DashboardSessionContext";
 import PrescribeClient, {
   type PrescriptionDraft,
@@ -78,41 +77,30 @@ export default function PrescribePage({ searchParams }: Props) {
         return;
       }
 
-      const supabase = createClient();
+      // 서버 액션 하나로 통합: patient + body parts + (편집 시 처방)을
+      // 서버 내부에서 병렬 조회하고 왕복 1회로 받아온다.
+      let bundle;
+      try {
+        bundle = await getPrescribeBundle(patientId, edit === "1");
+      } catch {
+        if (!cancelled) router.replace("/rehab-manage");
+        return;
+      }
 
-      // patient + body parts + (편집 시 처방) 병렬
-      const [patientRes, bodyPartsRes, prescriptionRes] =
-        await Promise.allSettled([
-          supabase
-            .from("profiles")
-            .select("id, name")
-            .eq("id", patientId)
-            .single(),
-          getBodyParts(),
-          edit === "1"
-            ? getPrescriptionByPatient(patientId)
-            : Promise.resolve(null),
-        ]);
-
-      const patientRow =
-        patientRes.status === "fulfilled" ? patientRes.value.data : null;
-      if (!patientRow) {
+      if (cancelled) return;
+      if (!bundle.patient) {
         router.replace("/rehab-manage");
         return;
       }
 
-      const bodyParts: BodyPart[] =
-        bodyPartsRes.status === "fulfilled" ? bodyPartsRes.value : [];
+      const initialDraft =
+        edit === "1"
+          ? buildInitialDraftFromPrescription(bundle.prescription)
+          : null;
 
-      let initialDraft: PrescriptionDraft | null = null;
-      if (edit === "1" && prescriptionRes.status === "fulfilled") {
-        initialDraft = buildInitialDraftFromPrescription(prescriptionRes.value);
-      }
-
-      if (cancelled) return;
       setData({
-        patient: { id: patientRow.id, name: patientRow.name || "이름 없음" },
-        bodyParts,
+        patient: bundle.patient,
+        bodyParts: bundle.bodyParts,
         initialDraft,
       });
     })();

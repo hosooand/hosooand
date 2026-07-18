@@ -30,7 +30,7 @@ export default function ExercisesClient({
   initialExercises,
   bodyParts,
 }: ExercisesClientProps) {
-  const [exercises, setExercises] = useState(initialExercises);
+  const [allExercises, setAllExercises] = useState(initialExercises);
   const [selectedBodyPart, setSelectedBodyPart] = useState("");
   const [selectedLevel, setSelectedLevel] = useState<ExerciseLevel | null>(
     null
@@ -39,28 +39,28 @@ export default function ExercisesClient({
   const [editTarget, setEditTarget] = useState<Exercise | null>(null);
   const [, startTransition] = useTransition();
 
-  const refetch = useCallback(
-    (bodyPartId?: string, level?: ExerciseLevel | null) => {
-      startTransition(async () => {
-        const data = await getExercises(
-          bodyPartId || undefined,
-          level ?? undefined
-        );
-        setExercises(data);
-      });
-    },
-    []
-  );
+  // 부위/단계 필터는 서버 재조회 없이 초기 로드분으로 로컬에서 즉시 필터링
+  const exercises = allExercises.filter((ex) => {
+    if (selectedBodyPart && ex.body_part_id !== selectedBodyPart) return false;
+    if (
+      selectedLevel !== null &&
+      (ex.level as ExerciseLevel) !== selectedLevel
+    )
+      return false;
+    return true;
+  });
 
-  const handleBodyPartChange = (id: string) => {
-    setSelectedBodyPart(id);
-    refetch(id, selectedLevel);
-  };
-
-  const handleLevelChange = (level: ExerciseLevel | null) => {
+  const handleBodyPartChange = (id: string) => setSelectedBodyPart(id);
+  const handleLevelChange = (level: ExerciseLevel | null) =>
     setSelectedLevel(level);
-    refetch(selectedBodyPart, level);
-  };
+
+  // 등록/수정 저장 후에만 전체 목록을 서버에서 최신화 (필터는 그대로 로컬 적용)
+  const refreshAll = useCallback(() => {
+    startTransition(async () => {
+      const data = await getExercises();
+      setAllExercises(data);
+    });
+  }, []);
 
   const openCreate = () => {
     setEditTarget(null);
@@ -75,7 +75,7 @@ export default function ExercisesClient({
   const handleSaved = () => {
     setModalOpen(false);
     setEditTarget(null);
-    refetch(selectedBodyPart, selectedLevel);
+    refreshAll();
   };
 
   const levelChipKey = selectedLevel === null ? "all" : String(selectedLevel);

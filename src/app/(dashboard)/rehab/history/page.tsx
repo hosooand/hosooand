@@ -2,11 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  getExerciseLogs,
-  getMedicalImages,
-  getPrescriptionByPatient,
-} from "@/lib/rehab/actions";
+import { getMemberHistoryBundle } from "@/lib/rehab/actions";
 import { weekRangeFromDate } from "@/lib/rehab/date-only";
 import { useDashboardSession } from "../../_components/DashboardSessionContext";
 import HistoryClient from "./HistoryClient";
@@ -39,25 +35,22 @@ export default function HistoryPage() {
       const today = new Date().toLocaleDateString("en-CA");
       const { start: startDate, end: endDate } = weekRangeFromDate(today);
 
+      // 서버 액션 하나로 통합: 서버 내부에서 로그·처방·의료이미지를 병렬 조회하고
+      // 왕복 1회로 받아온다. (기존 서버 액션 3개 직렬 큐잉 제거)
       let weekLogs: ExerciseLog[] = [];
+      let logDates: string[] = [];
       let medicalImages: MedicalImage[] = [];
       let prescription: Prescription | null = null;
 
-      // getWeekLogDates는 weekLogs와 동일 테이블·동일 범위를 중복 조회하므로 제거.
-      // 기록 날짜는 weekLogs에서 로컬로 추출한다.
-      const [logsRes, presRes, imgRes] = await Promise.allSettled([
-        getExerciseLogs(userId, startDate, endDate),
-        getPrescriptionByPatient(userId),
-        getMedicalImages(userId, { limit: 60 }),
-      ]);
-
-      if (logsRes.status === "fulfilled") weekLogs = logsRes.value;
-      if (presRes.status === "fulfilled") prescription = presRes.value;
-      if (imgRes.status === "fulfilled") medicalImages = imgRes.value;
-
-      const logDates = Array.from(
-        new Set(weekLogs.map((l) => l.performed_at))
-      );
+      try {
+        const bundle = await getMemberHistoryBundle(userId, startDate, endDate);
+        weekLogs = bundle.weekLogs;
+        logDates = bundle.logDates;
+        medicalImages = bundle.medicalImages;
+        prescription = bundle.prescription;
+      } catch {
+        // 테이블 미존재 등은 빈 상태로 처리
+      }
 
       if (cancelled) return;
       setData({

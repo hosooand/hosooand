@@ -42,6 +42,26 @@ async function withError<T>(
   }
 }
 
+// 처방 + 운동(임베디드 조인)을 1쿼리로 가져오기 위한 공통 select 문자열.
+// (prescriptions → prescription_exercises 순차 2쿼리를 1쿼리로 대체)
+const PRESCRIPTION_WITH_EXERCISES_SELECT =
+  "id, patient_id, staff_id, body_part_ids, current_level, note, status, created_at, updated_at, prescription_exercises(display_order, exercise:exercises(id, title, content_type, level, body_part_id, video_url, leaflet_images, leaflet_text, body_part:body_parts(id, name)))";
+
+// 임베디드 조인 결과(prescription_exercises 중첩)를 Prescription 형태로 매핑.
+function mapEmbeddedPrescription(raw: unknown): Prescription | null {
+  if (!raw) return null;
+  const r = raw as Record<string, unknown> & {
+    prescription_exercises?: { display_order?: number; exercise?: unknown }[];
+  };
+  const exercises = (r.prescription_exercises ?? [])
+    .slice()
+    .sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0))
+    .map((pe) => pe.exercise)
+    .filter(Boolean);
+  const { prescription_exercises: _pe, ...rest } = r;
+  return { ...rest, exercises } as unknown as Prescription;
+}
+
 // body_parts는 거의 변하지 않는 참조 데이터 → 워밍된 서버 인스턴스 내에서 짧게 캐싱.
 // 사용자별 데이터가 아니므로 모듈 레벨 캐시로 안전하게 재사용한다.
 const BODY_PARTS_TTL_MS = 5 * 60 * 1000;
@@ -661,9 +681,7 @@ export async function getMemberDashboardBundle(
     const [prescRes, logsRes] = await Promise.all([
       supabase
         .from("prescriptions")
-        .select(
-          "id, patient_id, staff_id, body_part_ids, current_level, note, status, created_at, updated_at, prescription_exercises(display_order, exercise:exercises(id, title, content_type, level, body_part_id, video_url, leaflet_images, leaflet_text, body_part:body_parts(id, name)))"
-        )
+        .select(PRESCRIPTION_WITH_EXERCISES_SELECT)
         .eq("patient_id", patientId)
         .eq("status", "active")
         .limit(1)
@@ -676,19 +694,7 @@ export async function getMemberDashboardBundle(
         .lte("performed_at", normalizeDateOnlyInput(rangeEnd)),
     ]);
 
-    let prescription: Prescription | null = null;
-    if (prescRes.data) {
-      const raw = prescRes.data as any;
-      const exercises = (raw.prescription_exercises ?? [])
-        .slice()
-        .sort(
-          (a: any, b: any) => (a.display_order ?? 0) - (b.display_order ?? 0)
-        )
-        .map((pe: any) => pe.exercise)
-        .filter(Boolean);
-      const { prescription_exercises: _pe, ...rest } = raw;
-      prescription = { ...rest, exercises } as Prescription;
-    }
+    const prescription = mapEmbeddedPrescription(prescRes.data);
 
     const logs = (logsRes.data ?? []) as unknown as ExerciseLog[];
 
@@ -1258,9 +1264,7 @@ export async function getPatientDetailBundle(patientId: string) {
           .single(),
         supabase
           .from("prescriptions")
-          .select(
-            "id, patient_id, staff_id, body_part_ids, current_level, note, status, created_at, updated_at, prescription_exercises(display_order, exercise:exercises(id, title, content_type, level, body_part_id, video_url, leaflet_images, leaflet_text, body_part:body_parts(id, name)))"
-          )
+          .select(PRESCRIPTION_WITH_EXERCISES_SELECT)
           .eq("patient_id", patientId)
           .eq("status", "active")
           .limit(1)
@@ -1285,19 +1289,7 @@ export async function getPatientDetailBundle(patientId: string) {
       : null;
 
     // 처방(임베디드 조인 1쿼리) → 운동 배열 매핑
-    let prescription: Prescription | null = null;
-    if (prescRes.data) {
-      const raw = prescRes.data as any;
-      const exercises = (raw.prescription_exercises ?? [])
-        .slice()
-        .sort(
-          (a: any, b: any) => (a.display_order ?? 0) - (b.display_order ?? 0)
-        )
-        .map((pe: any) => pe.exercise)
-        .filter(Boolean);
-      const { prescription_exercises: _pe, ...rest } = raw;
-      prescription = { ...rest, exercises } as Prescription;
-    }
+    const prescription = mapEmbeddedPrescription(prescRes.data);
 
     // 운동 로그 1회 조회분에서 차트·통증추이·통계·최근기록 로컬 생성
     const logs = (logsRes.data ?? []) as unknown as ExerciseLog[];
@@ -1341,6 +1333,92 @@ export async function getPatientDetailBundle(patientId: string) {
       exerciseStats,
       recentLogs,
     };
+  });
+}
+
+/**
+ * 회원 기록(history) 화면 전체를 단일 서버 액션 + 서버측 병렬 쿼리로 조회.
+ * (기존: getExerciseLogs + getPrescriptionByPatient + getMedicalImages 서버 액션 3개가
+ *  직렬 큐잉 + 처방 내부 순차 2쿼리 → 하나로 합쳐 왕복 1회로 축소)
+ */
+export async function getMemberHistoryBundle(
+  patientId: string,
+  startDate: string,
+  endDate: string
+) {
+  return withError("기록 조회", async () => {
+    const supabase = await createServerSupabaseClient();
+    const normStart = normalizeDateOnlyInput(startDate);
+    const normEnd = normalizeDateOnlyInput(endDate);
+
+    const [logsRes, prescRes, medicalImages] = await Promise.all([
+      supabase
+        .from("exercise_logs")
+        .select("*, exercise:exercises(*, body_part:body_parts(*))")
+        .eq("patient_id", patientId)
+        .gte("performed_at", normStart)
+        .lte("performed_at", normEnd)
+        .order("performed_at", { ascending: false }),
+      supabase
+        .from("prescriptions")
+        .select(PRESCRIPTION_WITH_EXERCISES_SELECT)
+        .eq("patient_id", patientId)
+        .eq("status", "active")
+        .limit(1)
+        .maybeSingle(),
+      getMedicalImages(patientId, { limit: 60 }),
+    ]);
+
+    const weekLogs = (logsRes.data ?? []) as unknown as ExerciseLog[];
+    const logDates = Array.from(new Set(weekLogs.map((l) => l.performed_at)));
+    const prescription = mapEmbeddedPrescription(prescRes.data);
+
+    return { weekLogs, logDates, medicalImages, prescription };
+  });
+}
+
+/**
+ * 처방 마법사 진입 데이터를 단일 서버 액션 + 서버측 병렬 쿼리로 조회.
+ * (기존: profiles(클라) + getBodyParts + getPrescriptionByPatient 직렬 → 왕복 1회)
+ */
+export async function getPrescribeBundle(patientId: string, edit: boolean) {
+  return withError("처방 준비 조회", async () => {
+    const supabase = await createServerSupabaseClient();
+
+    const [patientRes, bodyParts, prescRes] = await Promise.all([
+      supabase.from("profiles").select("id, name").eq("id", patientId).single(),
+      getBodyParts(),
+      edit
+        ? supabase
+            .from("prescriptions")
+            .select(PRESCRIPTION_WITH_EXERCISES_SELECT)
+            .eq("patient_id", patientId)
+            .eq("status", "active")
+            .limit(1)
+            .maybeSingle()
+        : Promise.resolve({ data: null } as { data: unknown }),
+    ]);
+
+    const patient = patientRes.data
+      ? { id: patientRes.data.id, name: patientRes.data.name || "이름 없음" }
+      : null;
+    const prescription = edit ? mapEmbeddedPrescription(prescRes.data) : null;
+
+    return { patient, bodyParts, prescription };
+  });
+}
+
+/**
+ * 운동관리 목록 진입 데이터를 단일 서버 액션으로 조회.
+ * (기존: getExercises + getBodyParts 서버 액션 2개 직렬 → 서버 내부 병렬 1회)
+ */
+export async function getExercisesPageBundle() {
+  return withError("운동 관리 조회", async () => {
+    const [exercises, bodyParts] = await Promise.all([
+      getExercises(),
+      getBodyParts(),
+    ]);
+    return { exercises, bodyParts };
   });
 }
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getExercises, getBodyParts } from "@/lib/rehab/actions";
+import { getExercisesPageBundle } from "@/lib/rehab/actions";
 import { useDashboardSession } from "../../_components/DashboardSessionContext";
 import ExercisesClient from "./ExercisesClient";
 import type { Exercise, BodyPart } from "@/types/rehab";
@@ -28,10 +28,8 @@ export default function ExercisesPage() {
     if (profile?.role === "member") return; // 곧 redirect됨
     let cancelled = false;
     (async () => {
-      const [exercises, bodyParts] = await Promise.all([
-        getExercises(),
-        getBodyParts(),
-      ]);
+      // 서버 액션 하나로 통합: 서버 내부에서 운동목록 + 부위목록 병렬 조회
+      const { exercises, bodyParts } = await getExercisesPageBundle();
 
       if (cancelled) return;
       setData({ exercises, bodyParts });
