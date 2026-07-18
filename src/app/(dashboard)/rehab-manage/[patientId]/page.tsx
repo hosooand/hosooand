@@ -2,13 +2,7 @@
 
 import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
-import {
-  getPrescriptionByPatient,
-  getPatientDetailExerciseBundle,
-  getMedicalImages,
-  getBodyParts,
-} from "@/lib/rehab/actions";
+import { getPatientDetailBundle } from "@/lib/rehab/actions";
 import { useDashboardSession } from "../../_components/DashboardSessionContext";
 import PatientDetailClient from "./PatientDetailClient";
 import type { ExerciseLog, MedicalImage, Prescription } from "@/types/rehab";
@@ -35,13 +29,6 @@ interface PageData {
   recentLogs: ExerciseLog[];
 }
 
-const emptyStats: ExerciseStatsData = {
-  totalDays: 0,
-  totalCount: 0,
-  avgPain: 0,
-  thisWeekDays: 0,
-};
-
 export default function PatientDetailPage({ params }: Props) {
   const { patientId } = use(params);
   const router = useRouter();
@@ -58,80 +45,33 @@ export default function PatientDetailPage({ params }: Props) {
     if (profile?.role === "member") return;
     let cancelled = false;
     (async () => {
-      const supabase = createClient();
+      // 서버 액션 하나로 통합: 서버 내부에서 모든 쿼리를 병렬(Promise.all) 실행하고
+      // 왕복 1회로 전체 데이터를 받아온다. (기존 서버 액션 4개 직렬 큐잉 제거)
+      let bundle;
+      try {
+        bundle = await getPatientDetailBundle(patientId);
+      } catch {
+        if (!cancelled) router.replace("/rehab-manage");
+        return;
+      }
 
-      // patient + 처방 + 운동 번들 + 이미지 + 부위목록(캐시됨) 모두 병렬 호출
-      const [patientRes, presRes, bundleRes, imgRes, bodyPartsRes] =
-        await Promise.allSettled([
-          supabase
-            .from("profiles")
-            .select("id, name, member_number")
-            .eq("id", patientId)
-            .single(),
-          getPrescriptionByPatient(patientId),
-          getPatientDetailExerciseBundle(patientId),
-          getMedicalImages(patientId, { limit: 5 }),
-          getBodyParts(),
-        ]);
-
-      const patientRow =
-        patientRes.status === "fulfilled" ? patientRes.value.data : null;
-      if (!patientRow) {
+      if (cancelled) return;
+      if (!bundle.patient) {
         router.replace("/rehab-manage");
         return;
       }
 
-      const prescription =
-        presRes.status === "fulfilled" ? presRes.value : null;
-
-      let weeklyChartData7: WeeklyChartData[] = [];
-      let weeklyChartData14: WeeklyChartData[] = [];
-      let painTrendData7: PainTrendData[] = [];
-      let painTrendData14: PainTrendData[] = [];
-      let exerciseStats: ExerciseStatsData = emptyStats;
-      let recentLogs: ExerciseLog[] = [];
-
-      if (bundleRes.status === "fulfilled") {
-        weeklyChartData7 = bundleRes.value.weeklyChartData7;
-        weeklyChartData14 = bundleRes.value.weeklyChartData14;
-        painTrendData7 = bundleRes.value.painTrendData7;
-        painTrendData14 = bundleRes.value.painTrendData14;
-        exerciseStats = bundleRes.value.exerciseStats;
-        recentLogs = bundleRes.value.recentLogs;
-      }
-
-      const medicalImages: MedicalImage[] =
-        imgRes.status === "fulfilled" ? imgRes.value : [];
-
-      // 부위 이름 맵은 캐시된 전체 부위 목록(병렬 조회분)에서 로컬로 구성 → 추가 순차 쿼리 제거
-      let bodyPartNames: Record<string, string> = {};
-      if (prescription && prescription.body_part_ids.length > 0) {
-        const allBodyParts =
-          bodyPartsRes.status === "fulfilled" ? bodyPartsRes.value : [];
-        const nameById = new Map(allBodyParts.map((b) => [b.id, b.name]));
-        bodyPartNames = Object.fromEntries(
-          prescription.body_part_ids
-            .filter((id) => nameById.has(id))
-            .map((id) => [id, nameById.get(id)!])
-        );
-      }
-
-      if (cancelled) return;
       setData({
-        patient: {
-          id: patientRow.id,
-          name: patientRow.name || "이름 없음",
-          member_number: patientRow.member_number || null,
-        },
-        prescription,
-        bodyPartNames,
-        medicalImages,
-        weeklyChartData7,
-        weeklyChartData14,
-        painTrendData7,
-        painTrendData14,
-        exerciseStats,
-        recentLogs,
+        patient: bundle.patient,
+        prescription: bundle.prescription,
+        bodyPartNames: bundle.bodyPartNames,
+        medicalImages: bundle.medicalImages,
+        weeklyChartData7: bundle.weeklyChartData7,
+        weeklyChartData14: bundle.weeklyChartData14,
+        painTrendData7: bundle.painTrendData7,
+        painTrendData14: bundle.painTrendData14,
+        exerciseStats: bundle.exerciseStats,
+        recentLogs: bundle.recentLogs,
       });
     })();
 

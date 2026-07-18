@@ -1235,6 +1235,115 @@ export async function getPatientDetailExerciseBundle(patientId: string) {
   });
 }
 
+/**
+ * 환자 상세 화면 전체 데이터를 "단일 서버 액션 + 서버측 병렬 쿼리"로 조회.
+ * (기존엔 클라이언트에서 서버 액션 4개를 호출 → Next.js가 서버 액션을 직렬 큐잉해
+ *  왕복이 순차로 4번 발생하며 느렸음. 하나로 합쳐 왕복 1회 + 서버 내 Promise.all 병렬화)
+ */
+export async function getPatientDetailBundle(patientId: string) {
+  return withError("환자 상세 조회", async () => {
+    const supabase = await createServerSupabaseClient();
+
+    const end = toDateOnlyString(new Date());
+    const start365 = addDaysDateOnly(end, -365);
+    const normStart = normalizeDateOnlyInput(start365);
+    const normEnd = normalizeDateOnlyInput(end);
+
+    const [patientRes, prescRes, logsRes, medicalImages, allBodyParts] =
+      await Promise.all([
+        supabase
+          .from("profiles")
+          .select("id, name, member_number")
+          .eq("id", patientId)
+          .single(),
+        supabase
+          .from("prescriptions")
+          .select(
+            "id, patient_id, staff_id, body_part_ids, current_level, note, status, created_at, updated_at, prescription_exercises(display_order, exercise:exercises(id, title, content_type, level, body_part_id, video_url, leaflet_images, leaflet_text, body_part:body_parts(id, name)))"
+          )
+          .eq("patient_id", patientId)
+          .eq("status", "active")
+          .limit(1)
+          .maybeSingle(),
+        supabase
+          .from("exercise_logs")
+          .select(EXERCISE_LOG_DETAIL_SELECT)
+          .eq("patient_id", patientId)
+          .gte("performed_at", normStart)
+          .lte("performed_at", normEnd)
+          .order("created_at", { ascending: false }),
+        getMedicalImages(patientId, { limit: 5 }),
+        getBodyParts(),
+      ]);
+
+    const patient = patientRes.data
+      ? {
+          id: patientRes.data.id,
+          name: patientRes.data.name || "이름 없음",
+          member_number: patientRes.data.member_number || null,
+        }
+      : null;
+
+    // 처방(임베디드 조인 1쿼리) → 운동 배열 매핑
+    let prescription: Prescription | null = null;
+    if (prescRes.data) {
+      const raw = prescRes.data as any;
+      const exercises = (raw.prescription_exercises ?? [])
+        .slice()
+        .sort(
+          (a: any, b: any) => (a.display_order ?? 0) - (b.display_order ?? 0)
+        )
+        .map((pe: any) => pe.exercise)
+        .filter(Boolean);
+      const { prescription_exercises: _pe, ...rest } = raw;
+      prescription = { ...rest, exercises } as Prescription;
+    }
+
+    // 운동 로그 1회 조회분에서 차트·통증추이·통계·최근기록 로컬 생성
+    const logs = (logsRes.data ?? []) as unknown as ExerciseLog[];
+    const { monday, sunday } = getMondayAndSunday();
+    const weeklyChartData7 = weeklyChartFromLogs(logs, monday, sunday);
+    const weeklyChartData14 = weeklyChartLast14FromLogs(logs, end);
+    const painTrendData7 = painTrendWeekFromLogs(logs, monday, sunday);
+    const painStart14 = addDaysDateOnly(end, -13);
+    const painTrendData14 = painTrendRollNDaysFromLogs(
+      logs,
+      painStart14,
+      end,
+      14
+    );
+    const exerciseStats = exerciseStatsFromLogs(logs, monday, sunday);
+    const start30 = addDaysDateOnly(end, -30);
+    const recentLogs = logs
+      .filter((l) => l.performed_at >= start30 && l.performed_at <= end)
+      .slice(0, 5);
+
+    // 부위 이름 맵은 캐시된 부위 목록에서 로컬 구성
+    let bodyPartNames: Record<string, string> = {};
+    if (prescription && prescription.body_part_ids.length > 0) {
+      const nameById = new Map(allBodyParts.map((b) => [b.id, b.name]));
+      bodyPartNames = Object.fromEntries(
+        prescription.body_part_ids
+          .filter((id) => nameById.has(id))
+          .map((id) => [id, nameById.get(id)!])
+      );
+    }
+
+    return {
+      patient,
+      prescription,
+      bodyPartNames,
+      medicalImages,
+      weeklyChartData7,
+      weeklyChartData14,
+      painTrendData7,
+      painTrendData14,
+      exerciseStats,
+      recentLogs,
+    };
+  });
+}
+
 // ─── 의료 이미지 ───
 
 export async function getMedicalImages(
