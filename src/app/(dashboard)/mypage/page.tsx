@@ -15,6 +15,7 @@ export default function MyPage() {
   const [deleting, setDeleting] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
+  const [userId,        setUserId]        = useState<string | null>(null)
   const [name,          setName]          = useState('')
   const [email,         setEmail]         = useState('')
   const [height,        setHeight]        = useState('')
@@ -33,6 +34,7 @@ export default function MyPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
 
+      setUserId(user.id)
       setEmail(user.email ?? '')
 
       const { data } = await supabase
@@ -53,16 +55,15 @@ export default function MyPage() {
   }, [])
 
   async function handleSave() {
+    if (!userId) return
     setSaving(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
 
     await supabase.from('profiles').update({
       name,
       height:         height ? Number(height) : null,
       current_weight: currentWeight ? Number(currentWeight) : null,
       avatar,
-    }).eq('id', user.id)
+    }).eq('id', userId)
 
     setSaving(false)
     setSaved(true)
@@ -75,11 +76,10 @@ export default function MyPage() {
   }
 
   async function handleDelete() {
+    if (!userId) return
     setDeleting(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
 
-    await supabase.from('profiles').delete().eq('id', user.id)
+    await supabase.from('profiles').delete().eq('id', userId)
     await supabase.auth.signOut()
     router.push('/login')
   }

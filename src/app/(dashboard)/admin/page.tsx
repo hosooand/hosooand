@@ -33,40 +33,37 @@ export default async function AdminPage() {
     profile?.role === 'admin' || (profile?.role === 'staff' && profile?.is_approved === true)
   if (!allowed || !profile) redirect('/select-service')
 
-  const { data: members, error: membersError } = await supabase
-    .from('profiles')
-    .select('id, name, height, current_weight, avatar, created_at, member_number, target_calories')
-    .eq('role', 'member')
-    .order('created_at', { ascending: false })
-
-  const memberList = members ?? []
-  const memberIds = memberList.map(m => m.id)
   const from = new Date()
   from.setDate(from.getDate() - 30)
   const fromStr = from.toLocaleDateString('en-CA')
 
-  // notes는 members와 무관, meal_logs는 memberIds 필요 → members 확정 후 둘을 병렬 실행
-  const [notesResult, mealLogsResult] = await Promise.all([
+  // members와 notes는 서로 독립적이라 병렬 실행. meal_logs는 memberIds가 필요해 이후 조회.
+  const [membersResult, notesResult] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('id, name, height, current_weight, avatar, created_at, member_number, target_calories')
+      .eq('role', 'member')
+      .order('created_at', { ascending: false }),
     supabase
       .from('staff_notes')
       .select('id, member_id, staff_id, content, created_at, updated_at')
       .order('created_at', { ascending: false }),
+  ])
+
+  const { data: members } = membersResult
+  const { data: notesRaw } = notesResult
+
+  const memberList = members ?? []
+  const memberIds = memberList.map(m => m.id)
+
+  const { data: mealLogs } =
     memberIds.length > 0
-      ? supabase
+      ? await supabase
           .from('daily_logs')
           .select('user_id, meal_entries')
           .gte('date', fromStr)
           .in('user_id', memberIds)
-      : Promise.resolve({ data: null as { user_id: string; meal_entries: unknown }[] | null, error: null }),
-  ])
-
-  const { data: notesRaw, error: notesError } = notesResult
-  const { data: mealLogs } = mealLogsResult
-
-  console.log('DB에서 조회한 고객 데이터:', members)
-  console.log('고객 조회 에러:', membersError)
-  console.log('DB에서 조회한 메모 데이터:', notesRaw)
-  console.log('메모 조회 에러:', notesError)
+      : { data: null as { user_id: string; meal_entries: unknown }[] | null }
 
   const mealUserIds = new Set<string>()
   for (const row of mealLogs ?? []) {
