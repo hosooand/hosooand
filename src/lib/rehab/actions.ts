@@ -92,13 +92,13 @@ export async function getExercises(
   return withError("운동 목록 조회", async () => {
     const supabase = await createServerSupabaseClient();
 
+    // 운동관리 화면은 전체 운동을 받아 클라이언트에서 로컬 필터링하므로 limit을 두지 않는다.
     let query = supabase
       .from("exercises")
       .select(
         "id, title, description, body_part_id, content_type, video_url, leaflet_images, leaflet_text, level, created_by, is_active, created_at, updated_at, body_part:body_parts(id, name, category, display_order)"
       )
-      .order("created_at", { ascending: false })
-      .limit(50);
+      .order("created_at", { ascending: false });
 
     if (bodyPartId) {
       query = query.eq("body_part_id", bodyPartId);
