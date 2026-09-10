@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
-import { Camera, Loader2, Sparkles, RefreshCw, X, ChevronDown, ChevronUp, CheckCircle2, Clock, Pencil, Check } from 'lucide-react'
+import { Camera, Loader2, Sparkles, RefreshCw, X, ChevronDown, ChevronUp, CheckCircle2, Clock, Pencil, Check, Plus } from 'lucide-react'
+import { applyMealImageUrls, getMealImageUrls, MAX_MEAL_IMAGES } from '@/lib/meal-images'
 import duckRun from '@/assets/images/duck-run.png'
 import duckGym from '@/assets/images/duck-gym.png'
 import duckPilates from '@/assets/images/duck-pilates.png'
@@ -33,11 +34,25 @@ export interface MealPanelEntry {
   meal_type:    MealType
   time:         string | null   // ← 추가: "HH:MM" 형식
   image_url:    string | null
+  /** 두 번째 식사 사진. 기존 1장 데이터에는 없음 */
+  image_url_2?: string | null
   content:      string | null
   calories:     number | null
   analysis:     MealAnalysis | null
   /** 없으면 1(전부) — AI 분석 칼로리 기준 */
   intake_ratio?: IntakeRatio
+}
+
+function emptyMealEntry(mealType: MealType, time: string | null = null): MealPanelEntry {
+  return {
+    meal_type:   mealType,
+    time,
+    image_url:   null,
+    image_url_2: null,
+    content:     null,
+    calories:    null,
+    analysis:    null,
+  }
 }
 
 const DEFAULT_GOAL_KCAL = 1200
@@ -238,10 +253,12 @@ function MealCard({ userId, date, mealType, entry, onChange, dayTotalCalories, g
   const supabase  = createClient()
   const { style, defaultTime } = MEAL_DEFAULTS[mealType]
   const fileRef   = useRef<HTMLInputElement>(null)
+  const uploadSlotRef = useRef<0 | 1>(0)
 
   const [inputMode, setInputMode] = useState<'photo' | 'text'>('photo')
   const [content,   setContent]   = useState(entry.content ?? '')
   const [uploading, setUploading] = useState(false)
+  const [uploadSlot, setUploadSlot] = useState<0 | 1>(0)
 
   useEffect(() => {
     setContent(entry.content ?? '')
@@ -261,13 +278,21 @@ function MealCard({ userId, date, mealType, entry, onChange, dayTotalCalories, g
 
   const isLoading  = uploading || analyzing
   const currentTime = entry.time ?? defaultTime
+  const imageUrls = getMealImageUrls(entry)
+  const canAddImage = imageUrls.length < MAX_MEAL_IMAGES
 
-  async function uploadFile(file: File): Promise<string> {
+  function pickImage(slot: 0 | 1) {
+    uploadSlotRef.current = slot
+    setUploadSlot(slot)
+    fileRef.current?.click()
+  }
+
+  async function uploadFile(file: File, slot: 0 | 1): Promise<string> {
     const ext = file.name.split('.').pop() ?? 'jpg'
     const mealTypeMap: Record<MealType, string> = {
       아침: 'breakfast', 점심: 'lunch', 저녁: 'dinner', 간식: 'snack'
     }
-    const path = `${userId}/${date}-${mealTypeMap[mealType]}-${Date.now()}.${ext}`
+    const path = `${userId}/${date}-${mealTypeMap[mealType]}-${slot + 1}-${Date.now()}.${ext}`
     const { error: upErr } = await supabase.storage
       .from('meal-images')
       .upload(path, file, { upsert: true, contentType: file.type })
@@ -275,46 +300,89 @@ function MealCard({ userId, date, mealType, entry, onChange, dayTotalCalories, g
     return supabase.storage.from('meal-images').getPublicUrl(path).data.publicUrl
   }
 
+  async function analyzeImages(urls: string[]): Promise<MealAnalysis> {
+    const res = await fetch('/api/analyze-meal', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ imageUrl: urls[0], imageUrls: urls, date }),
+    })
+    const raw = await res.json()
+    if (!res.ok) {
+      const msg =
+        typeof (raw as { error?: string }).error === 'string'
+          ? (raw as { error: string }).error
+          : '이미지 분석 실패'
+      throw new Error(msg)
+    }
+    return raw as MealAnalysis
+  }
+
+  function applyAnalyzedImages(urls: string[], analysis: MealAnalysis) {
+    const base = baseMealCalories(analysis)
+    onChange(applyMealImageUrls({
+      ...entry,
+      meal_type:    mealType,
+      calories:     Math.round(base),
+      analysis:     { ...analysis, calories: base },
+      intake_ratio: 1,
+    }, urls))
+  }
+
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
+    e.target.value = ''
     if (!file) return
     if (!file.type.startsWith('image/')) { setError('이미지 파일만 가능해요'); return }
     if (file.size > 10 * 1024 * 1024)   { setError('10MB 이하만 가능해요');   return }
+    const slot = uploadSlotRef.current
     setError(null)
     setUploading(true)
     try {
-      const url = await uploadFile(file)
+      const url = await uploadFile(file, slot)
+      const nextUrls = [...getMealImageUrls(entry)]
+      if (slot === 0) {
+        if (nextUrls.length === 0) nextUrls.push(url)
+        else nextUrls[0] = url
+      } else if (nextUrls.length < 2) {
+        nextUrls.push(url)
+      } else {
+        nextUrls[1] = url
+      }
       setUploading(false)
       setAnalyzeUiKey((k) => k + 1)
       setAnalyzing(true)
-      const res = await fetch('/api/analyze-meal', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ imageUrl: url, date }),
-      })
-      const raw = await res.json()
-      if (!res.ok) {
-        const msg =
-          typeof (raw as { error?: string }).error === 'string'
-            ? (raw as { error: string }).error
-            : '이미지 분석 실패'
-        throw new Error(msg)
-      }
-      const analysis = raw as MealAnalysis
-      const base = baseMealCalories(analysis)
-      onChange({
-        ...entry,
-        meal_type:    mealType,
-        image_url:    url,
-        calories:     Math.round(base),
-        analysis:     { ...analysis, calories: base },
-        intake_ratio: 1,
-      })
+      const analysis = await analyzeImages(nextUrls)
+      applyAnalyzedImages(nextUrls, analysis)
       flashSaved()
     } catch (e) {
       setError(e instanceof Error ? e.message : '업로드 실패')
     } finally {
       setUploading(false)
+      setAnalyzing(false)
+    }
+  }
+
+  async function handleRemoveImage(index: 0 | 1) {
+    if (isLoading) return
+    const nextUrls = getMealImageUrls(entry).filter((_, i) => i !== index)
+    if (nextUrls.length === 0) {
+      onChange(applyMealImageUrls({
+        ...entry,
+        calories: entry.content ? entry.calories : null,
+        analysis: entry.content ? entry.analysis : null,
+      }, []))
+      return
+    }
+    setError(null)
+    setAnalyzeUiKey((k) => k + 1)
+    setAnalyzing(true)
+    try {
+      const analysis = await analyzeImages(nextUrls)
+      applyAnalyzedImages(nextUrls, analysis)
+      flashSaved()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '이미지 분석 실패')
+    } finally {
       setAnalyzing(false)
     }
   }
@@ -356,7 +424,7 @@ function MealCard({ userId, date, mealType, entry, onChange, dayTotalCalories, g
   function handleClear() {
     setEditingFoodIdx(null)
     setFoodCalDraft('')
-    onChange({ meal_type: mealType, time: entry.time, image_url: null, content: null, calories: null, analysis: null })
+    onChange(emptyMealEntry(mealType, entry.time))
     setContent('')
     setError(null)
   }
@@ -432,7 +500,7 @@ function MealCard({ userId, date, mealType, entry, onChange, dayTotalCalories, g
           {saved && <CheckCircle2 size={15} className="text-emerald-500" />}
         </div>
         <div className="flex items-center gap-1.5">
-          {(entry.image_url || entry.content) && (
+          {(imageUrls.length > 0 || entry.content) && (
             <button type="button" onClick={handleClear} disabled={isLoading}
               className="w-7 h-7 rounded-full flex items-center justify-center
                 text-gray-300 hover:text-rose-400 hover:bg-rose-50 transition-all">
@@ -484,43 +552,78 @@ function MealCard({ userId, date, mealType, entry, onChange, dayTotalCalories, g
 
               {/* 사진 모드 */}
               {inputMode === 'photo' && (
-                entry.image_url ? (
-                  <div className="relative w-full rounded-xl overflow-hidden">
-                    <div className="relative w-full aspect-[4/3]">
-                      <Image src={entry.image_url} alt={`${mealType} 식단`} fill
-                        className="object-cover" sizes="(max-width: 640px) 100vw, 400px" />
-                      {uploading && (
-                        <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center gap-2">
-                          <Loader2 size={28} className="text-white animate-spin" />
-                          <p className="text-white text-[13px] font-medium">업로드 중...</p>
-                        </div>
+                <div className="space-y-2">
+                  {imageUrls.length === 0 ? (
+                    <button type="button" onClick={() => !isLoading && pickImage(0)}
+                      disabled={isLoading}
+                      className="w-full h-32 rounded-xl border-2 border-dashed border-gray-200
+                        bg-white/70 flex flex-col items-center justify-center gap-2
+                        hover:border-pink-300 hover:bg-pink-50/50
+                        disabled:opacity-50 disabled:cursor-not-allowed transition-all group">
+                      {uploading
+                        ? <Loader2 size={24} className="text-pink-400 animate-spin" />
+                        : <>
+                            <Camera size={24} className="text-gray-300 group-hover:text-pink-400 transition-colors" />
+                            <span className="text-[12px] text-gray-400 group-hover:text-pink-400">사진을 추가하세요</span>
+                            <span className="text-[10px] text-gray-300">최대 2장 · 각 10MB</span>
+                          </>
+                      }
+                    </button>
+                  ) : (
+                    <>
+                      <div className={imageUrls.length === 1 ? '' : 'grid grid-cols-2 gap-2'}>
+                        {imageUrls.map((url, idx) => (
+                          <div key={`${url}-${idx}`} className="relative w-full rounded-xl overflow-hidden">
+                            <div className="relative w-full aspect-[4/3]">
+                              <Image src={url} alt={`${mealType} 식단 ${idx + 1}`} fill
+                                className="object-cover"
+                                sizes={imageUrls.length === 1 ? '(max-width: 640px) 100vw, 400px' : '(max-width: 640px) 50vw, 200px'} />
+                              {uploading && uploadSlot === idx && (
+                                <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center gap-2">
+                                  <Loader2 size={28} className="text-white animate-spin" />
+                                  <p className="text-white text-[13px] font-medium">업로드 중...</p>
+                                </div>
+                              )}
+                            </div>
+                            {!uploading && (
+                              <>
+                                {imageUrls.length > 1 && (
+                                  <button type="button" onClick={() => handleRemoveImage(idx as 0 | 1)}
+                                    className="absolute top-2 left-2 w-7 h-7 bg-white/90 rounded-full
+                                      flex items-center justify-center text-gray-500 shadow">
+                                    <X size={12} />
+                                  </button>
+                                )}
+                                <button type="button" onClick={() => pickImage(idx as 0 | 1)}
+                                  className="absolute top-2 right-2 bg-white/90 rounded-full px-2.5 py-1
+                                    text-[11px] font-medium text-gray-600 flex items-center gap-1 shadow">
+                                  <RefreshCw size={10} />교체
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      {canAddImage && (
+                        <button type="button" onClick={() => !isLoading && pickImage(1)}
+                          disabled={isLoading}
+                          className="w-full h-20 rounded-xl border-2 border-dashed border-gray-200
+                            bg-white/70 flex flex-col items-center justify-center gap-1
+                            hover:border-pink-300 hover:bg-pink-50/50
+                            disabled:opacity-50 disabled:cursor-not-allowed transition-all group">
+                          {uploading && uploadSlot === 1
+                            ? <Loader2 size={20} className="text-pink-400 animate-spin" />
+                            : <>
+                                <Plus size={18} className="text-gray-300 group-hover:text-pink-400 transition-colors" />
+                                <span className="text-[12px] text-gray-400 group-hover:text-pink-400">사진 추가</span>
+                                <span className="text-[10px] text-gray-300">최대 2장</span>
+                              </>
+                          }
+                        </button>
                       )}
-                    </div>
-                    {!uploading && (
-                      <button type="button" onClick={() => fileRef.current?.click()}
-                        className="absolute top-2 right-2 bg-white/90 rounded-full px-2.5 py-1
-                          text-[11px] font-medium text-gray-600 flex items-center gap-1 shadow">
-                        <RefreshCw size={10} />교체
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                  <button type="button" onClick={() => !isLoading && fileRef.current?.click()}
-                    disabled={isLoading}
-                    className="w-full h-32 rounded-xl border-2 border-dashed border-gray-200
-                      bg-white/70 flex flex-col items-center justify-center gap-2
-                      hover:border-pink-300 hover:bg-pink-50/50
-                      disabled:opacity-50 disabled:cursor-not-allowed transition-all group">
-                    {uploading
-                      ? <Loader2 size={24} className="text-pink-400 animate-spin" />
-                      : <>
-                          <Camera size={24} className="text-gray-300 group-hover:text-pink-400 transition-colors" />
-                          <span className="text-[12px] text-gray-400 group-hover:text-pink-400">사진을 추가하세요</span>
-                          <span className="text-[10px] text-gray-300">최대 10MB</span>
-                        </>
-                    }
-                  </button>
-                )
+                    </>
+                  )}
+                </div>
               )}
 
               {/* 텍스트 모드 */}
@@ -794,14 +897,7 @@ export default function DailyMealPanel({ userId, date, entries, onChange, target
     const next = MEAL_ORDER.map((type) =>
       type === updated.meal_type
         ? updated
-        : entryMap[type] ?? {
-            meal_type: type,
-            time:      null,
-            image_url: null,
-            content:   null,
-            calories:  null,
-            analysis:  null,
-          }
+        : entryMap[type] ?? emptyMealEntry(type)
     )
     onChange(next)
   }
@@ -823,14 +919,7 @@ export default function DailyMealPanel({ userId, date, entries, onChange, target
           mealType={mealType}
           dayTotalCalories={totalCalories}
           goalKcal={goalKcal}
-          entry={entryMap[mealType] ?? {
-            meal_type: mealType,
-            time:      null,
-            image_url: null,
-            content:   null,
-            calories:  null,
-            analysis:  null,
-          }}
+          entry={entryMap[mealType] ?? emptyMealEntry(mealType)}
           onChange={handleChange}
         />
       ))}

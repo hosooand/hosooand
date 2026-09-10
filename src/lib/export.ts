@@ -1,5 +1,6 @@
 import type ExcelJS from 'exceljs'
 import type { DailyLog } from '@/types/diary'
+import { getMealImageUrls } from '@/lib/meal-images'
 
 interface Member {
   name:           string
@@ -13,6 +14,7 @@ interface MealPanelEntry {
   meal_type:    '아침' | '점심' | '저녁' | '간식'
   time:         string | null
   image_url:    string | null
+  image_url_2?: string | null
   content:      string | null
   calories:     number | null
   intake_ratio?: number
@@ -203,7 +205,7 @@ export async function generateMemberExcel(
 
   for (const log of filteredLogs) {
     const entries  = parseMealEntries((log as DailyLog & { meal_entries?: unknown }).meal_entries)
-    const hasImage = MEAL_TYPES.some(mt => !!getMealEntry(entries, mt)?.image_url)
+    const hasImage = MEAL_TYPES.some(mt => getMealImageUrls(getMealEntry(entries, mt)).length > 0)
 
     const ROW_H = hasImage ? 180 : 100
 
@@ -247,15 +249,17 @@ export async function generateMemberExcel(
       const cell     = row.getCell(colIdx)
       const time     = entry?.time ?? MEAL_DEFAULTS[mealType]
 
-      if (entry?.image_url) {
+      const mealImages = getMealImageUrls(entry)
+
+      if (mealImages.length > 0) {
         // ── 텍스트: 시간(상단) + 칼로리/음식명(하단) ──
-        const cal   = entry.calories ?? entry.analysis?.calories ?? 0
-        const foods = entry.analysis?.foods ?? []
+        const cal   = entry?.calories ?? entry?.analysis?.calories ?? 0
+        const foods = entry?.analysis?.foods ?? []
         const foodLines = foods.length > 0
           ? foods.map(f =>
             `${removeEnglishInParens(f.name)} (${Math.round(f.calories)}kcal)`
           ).join('\n')
-          : entry.content ?? ''
+          : entry?.content ?? ''
         const bottomText = [
           foodLines,
           cal > 0 ? `합계: ${Math.round(cal)}kcal` : '',
@@ -274,17 +278,15 @@ export async function generateMemberExcel(
           alignment: { vertical: 'top', horizontal: 'left', wrapText: true },
         }
 
-        // 이미지 삽입: 시간 텍스트 아래 ~ 칼로리 텍스트 위
-        const imgData = await fetchImageAsBase64(entry.image_url)
-        if (imgData) {
+        const colSpan = 0.90 / mealImages.length
+        for (let j = 0; j < mealImages.length; j++) {
+          const imgData = await fetchImageAsBase64(mealImages[j])
+          if (!imgData) continue
           const imageId = wb.addImage({ base64: imgData.base64, extension: imgData.ext })
-
-          // 1pt ≈ 0.75px, ExcelJS row/col은 0-based
-          // 상단 오프셋: 시간 텍스트 높이 만큼 (약 18pt)
-          // 하단 오프셋: 칼로리 텍스트 높이 만큼 (약 30pt)
+          const colStart = colIdxZ + 0.05 + j * colSpan
           ws.addImage(imageId, {
-            tl: { col: colIdxZ + 0.05, row: rowIndex - 1 + (18  / ROW_H) } as ExcelJS.Anchor,
-            br: { col: colIdxZ + 0.95, row: rowIndex - 1 + ((ROW_H - 32) / ROW_H) } as ExcelJS.Anchor,
+            tl: { col: colStart, row: rowIndex - 1 + (18 / ROW_H) } as ExcelJS.Anchor,
+            br: { col: colStart + colSpan - 0.02, row: rowIndex - 1 + ((ROW_H - 32) / ROW_H) } as ExcelJS.Anchor,
             editAs: 'oneCell',
           })
         }

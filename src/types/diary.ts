@@ -4,6 +4,7 @@ export interface MealEntry {
   type:       MealType
   time:       string | null   // "08:30" 형식
   image_url:  string | null
+  image_url_2?: string | null
   text:       string | null
   analysis:   MealAnalysis | null
 }

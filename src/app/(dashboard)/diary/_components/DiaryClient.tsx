@@ -8,6 +8,7 @@ import { DailyLogSchema, type DailyLogFormValues } from '@/lib/validations/diary
 import type { FieldErrors } from 'react-hook-form'
 import type { DailyLog } from '@/types/diary'
 import DailyMealPanel, { type MealPanelEntry } from './DailyMealPanel'
+import { applyMealImageUrls, getMealImageUrls } from '@/lib/meal-images'
 import ConditionPicker from './ConditionPicker'
 import ExerciseSection from './ExerciseSection'
 import { upsertDailyLog } from '@/lib/supabase/diary'
@@ -81,7 +82,9 @@ function extractMealEntries(log: DailyLog | null): MealPanelEntry[] {
   if (!log) return []
   const entries = (log as DailyLog & { meal_entries?: MealPanelEntry[] })?.meal_entries
   if (!Array.isArray(entries)) return []
-  return entries.filter(e => e.meal_type != null)
+  return entries
+    .filter(e => e.meal_type != null)
+    .map(e => applyMealImageUrls(e, getMealImageUrls(e)))
 }
 
 export default function DiaryClient({ date, initialLog, profile, userId }: Props) {
@@ -186,6 +189,7 @@ export default function DiaryClient({ date, initialLog, profile, userId }: Props
                 meal_type: (mealEntries ?? [])[0]?.meal_type,
                 time: (mealEntries ?? [])[0]?.time,
                 has_image_url: Boolean((mealEntries ?? [])[0]?.image_url),
+                has_image_url_2: Boolean((mealEntries ?? [])[0]?.image_url_2),
                 has_content: Boolean((mealEntries ?? [])[0]?.content),
                 has_analysis: Boolean((mealEntries ?? [])[0]?.analysis),
               }

@@ -3,6 +3,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai'
 import sharp from 'sharp'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { normalizeMealAnalysis } from '@/lib/meal-analysis-normalize'
+import { MAX_MEAL_IMAGES } from '@/lib/meal-images'
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
 
@@ -16,31 +17,59 @@ async function compressImage(buffer: Buffer): Promise<string> {
   return compressed.toString('base64')
 }
 
+function collectImageUrls(body: unknown): string[] {
+  const rec = (body ?? {}) as { imageUrl?: unknown; imageUrls?: unknown }
+  const fromArray = Array.isArray(rec.imageUrls) ? rec.imageUrls : []
+  const fromSingle = rec.imageUrl != null ? [rec.imageUrl] : []
+  const raw = fromArray.length > 0 ? fromArray : fromSingle
+  return raw
+    .filter((u): u is string => typeof u === 'string' && u.trim().length > 0)
+    .slice(0, MAX_MEAL_IMAGES)
+}
+
 export async function POST(req: NextRequest) {
   try {
     const supabase = await createServerSupabaseClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: '인증 필요' }, { status: 401 })
 
-    const { imageUrl, date } = await req.json()
+    const body = await req.json()
+    const date = body?.date
+    const imageUrls = collectImageUrls(body)
     console.log('[analyze-meal] 요청 date', {
       date,
       dateType: typeof date,
       dateIsValidFormat: typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date),
+      imageCount: imageUrls.length,
     })
-    if (!imageUrl) return NextResponse.json({ error: 'imageUrl 필요' }, { status: 400 })
+    if (imageUrls.length === 0) return NextResponse.json({ error: 'imageUrl 필요' }, { status: 400 })
     if (!date || typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       return NextResponse.json({ error: 'date(YYYY-MM-DD) 필요' }, { status: 400 })
     }
 
-    const imgRes = await fetch(imageUrl)
-    const arrayBuffer = await imgRes.arrayBuffer()
-    const base64 = await compressImage(Buffer.from(arrayBuffer))
-    const contentType = 'image/jpeg'
+    const compressedParts: { inlineData: { mimeType: string; data: string } }[] = []
+    for (const url of imageUrls) {
+      const imgRes = await fetch(url)
+      if (!imgRes.ok) {
+        return NextResponse.json({ error: '이미지를 불러오지 못했어요' }, { status: 400 })
+      }
+      const arrayBuffer = await imgRes.arrayBuffer()
+      const base64 = await compressImage(Buffer.from(arrayBuffer))
+      compressedParts.push({
+        inlineData: {
+          mimeType: 'image/jpeg',
+          data: base64,
+        },
+      })
+    }
 
     const model = genAI.getGenerativeModel({ model: 'gemini-flash-lite-latest' })
 
-    const prompt = `당신은 10년 경력의 영양사이자 다이어트 매니저입니다. 이 식사 사진을 분석하고 다이어트 관점에서 평가해주세요. JSON만 반환하세요. 다른 텍스트 금지.
+    const photoIntro = imageUrls.length > 1
+      ? `같은 끼니의 식사 사진이 ${imageUrls.length}장입니다. 모든 사진을 종합해 한 끼 전체로 분석하세요. 여러 장에 같은 음식이 보이면 중복 계산하지 마세요.`
+      : '이 식사 사진을 분석하고 다이어트 관점에서 평가해주세요.'
+
+    const prompt = `당신은 10년 경력의 영양사이자 다이어트 매니저입니다. ${photoIntro} JSON만 반환하세요. 다른 텍스트 금지.
 
 ## 사용자 정보
 - 이 사용자의 하루 권장 칼로리는 1100kcal입니다.
@@ -71,12 +100,7 @@ export async function POST(req: NextRequest) {
 
     const result = await model.generateContent([
       prompt,
-      {
-        inlineData: {
-          mimeType: contentType,
-          data: base64,
-        },
-      },
+      ...compressedParts,
     ])
 
     const raw = result.response.text()
@@ -87,7 +111,7 @@ export async function POST(req: NextRequest) {
     const analysis = normalizeMealAnalysis(parsed)
 
     await supabase.from('daily_logs').upsert(
-      { user_id: user.id, date, meal_image_url: imageUrl, meal_analysis: analysis },
+      { user_id: user.id, date, meal_image_url: imageUrls[0], meal_analysis: analysis },
       { onConflict: 'user_id,date' },
     )
 

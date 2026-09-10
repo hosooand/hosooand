@@ -9,6 +9,7 @@ import type { DailyLog } from '@/types/diary'
 import { createMember } from '@/app/actions/admin'
 import { generateMemberExcel } from '@/lib/export'
 import { mealEntriesHasRecords } from '@/lib/meal-entries'
+import { getMealImageUrls } from '@/lib/meal-images'
 import Link from 'next/link'
 
 interface Member {
@@ -779,12 +780,14 @@ export default function AdminClient({ members: initialMembers, staffId, initialN
                       {/* 식사별 기록 */}
                       {(() => {
                         const entries = (log as unknown as Record<string, unknown>).meal_entries as
-                          | { meal_type: string; image_url?: string | null; content?: string | null; calories?: number | null }[]
+                          | { meal_type: string; image_url?: string | null; image_url_2?: string | null; content?: string | null; calories?: number | null }[]
                           | undefined
                         if (!Array.isArray(entries) || entries.length === 0) return null
                         return (
                           <div className="mt-2 space-y-2.5">
-                            {entries.map((entry, idx) => (
+                            {entries.map((entry, idx) => {
+                              const mealImages = getMealImageUrls(entry)
+                              return (
                               <div key={idx} style={{
                                 backgroundColor: '#ffffff',
                                 borderRadius: 16,
@@ -803,19 +806,28 @@ export default function AdminClient({ members: initialMembers, staffId, initialN
                                 }}>
                                   {entry.meal_type}
                                 </span>
-                                {entry.image_url && (
-                                  <img
-                                    src={entry.image_url}
-                                    alt={entry.meal_type}
-                                    style={{
-                                      width: '100%',
-                                      maxHeight: 160,
-                                      objectFit: 'cover',
-                                      borderRadius: 12,
-                                      display: 'block',
-                                      marginBottom: 8,
-                                    }}
-                                  />
+                                {mealImages.length > 0 && (
+                                  <div style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: mealImages.length > 1 ? '1fr 1fr' : '1fr',
+                                    gap: 8,
+                                    marginBottom: 8,
+                                  }}>
+                                    {mealImages.map((url, imgIdx) => (
+                                      <img
+                                        key={`${url}-${imgIdx}`}
+                                        src={url}
+                                        alt={`${entry.meal_type} ${imgIdx + 1}`}
+                                        style={{
+                                          width: '100%',
+                                          maxHeight: 160,
+                                          objectFit: 'cover',
+                                          borderRadius: 12,
+                                          display: 'block',
+                                        }}
+                                      />
+                                    ))}
+                                  </div>
                                 )}
                                 {entry.content && (
                                   <p style={{ fontSize: 14, color: '#334155', margin: 0, marginBottom: 4 }}>
@@ -828,7 +840,8 @@ export default function AdminClient({ members: initialMembers, staffId, initialN
                                   </p>
                                 )}
                               </div>
-                            ))}
+                              )
+                            })}
                           </div>
                         )
                       })()}

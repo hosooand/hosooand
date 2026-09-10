@@ -51,6 +51,7 @@ function toMealsColumn(rawEntries: unknown): Array<{
   type: string
   time: string | null
   image_url: string | null
+  image_url_2: string | null
   text: string | null
   analysis: unknown
 }> {
@@ -62,6 +63,7 @@ function toMealsColumn(rawEntries: unknown): Array<{
         type?: string
         time?: string | null
         image_url?: string | null
+        image_url_2?: string | null
         content?: string | null
         text?: string | null
         analysis?: unknown
@@ -71,12 +73,13 @@ function toMealsColumn(rawEntries: unknown): Array<{
         type: MEAL_TYPE_TO_EN[rawType] ?? rawType,
         time: entry.time ?? null,
         image_url: entry.image_url ?? null,
+        image_url_2: entry.image_url_2 ?? null,
         text: entry.content ?? entry.text ?? null,
         analysis: entry.analysis ?? null,
       }
     })
     // 실제 데이터(텍스트·이미지·분석)가 있는 식사만 저장 (빈 슬롯 제외)
-    .filter((m) => m.text || m.image_url || m.analysis)
+    .filter((m) => m.text || m.image_url || m.image_url_2 || m.analysis)
 }
 
 export async function upsertDailyLog(
