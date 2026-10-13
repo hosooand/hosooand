@@ -38,8 +38,8 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
 
         {/* 하단 중앙 오리 */}
         <div className="relative z-10 flex justify-center pb-2">
-          <Image src="/duck-gym.png" alt="통통이" width={140} height={140}
-            className="object-contain drop-shadow-lg" />
+          <Image src="/duck-gym.webp" alt="통통이" width={140} height={140}
+            className="object-contain drop-shadow-lg" priority />
         </div>
       </div>
 
@@ -60,8 +60,8 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
         <p className="relative z-10 text-white/60 mb-4" style={{ fontSize: 13 }}>
           마취통증의학과의원
         </p>
-        <Image src="/duck-gym.png" alt="통통이" width={100} height={100}
-          className="relative z-10 object-contain" />
+        <Image src="/duck-gym.webp" alt="통통이" width={100} height={100}
+          className="relative z-10 object-contain" priority />
       </div>
 
       {/* 오른쪽(PC 56%) / 하단(모바일) 폼 영역 */}

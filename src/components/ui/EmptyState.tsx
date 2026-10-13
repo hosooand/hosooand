@@ -13,7 +13,7 @@ export default function EmptyState({
   description,
   actionLabel,
   onAction,
-  imageSrc = '/duck.png',
+  imageSrc = '/duck.webp',
 }: EmptyStateProps) {
   return (
     <div className="flex flex-col items-center justify-center py-12 gap-4 text-center">

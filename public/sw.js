@@ -1,4 +1,4 @@
-const CACHE_NAME = 's-body-v1'
+const CACHE_NAME = 's-body-v2'
 
 // 오프라인에서도 보여줄 핵심 리소스
 const STATIC_ASSETS = [
@@ -8,7 +8,7 @@ const STATIC_ASSETS = [
   '/offline',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
-  '/duck.png',
+  '/duck.webp',
   '/logo.png',
 ]
 

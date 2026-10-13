@@ -23,10 +23,10 @@ export default function MyPage() {
   const [avatar,        setAvatar]        = useState('duck')
 
   const AVATARS = [
-    { id: 'duck',         src: '/duck.png',         label: '기본'     },
-    { id: 'duck-run',     src: '/duck-run.png',     label: '달리기'   },
-    { id: 'duck-pilates', src: '/duck-pilates.png', label: '필라테스' },
-    { id: 'duck-gym',     src: '/duck-gym.png',     label: '헬스'     },
+    { id: 'duck',         src: '/duck.webp',         label: '기본'     },
+    { id: 'duck-run',     src: '/duck-run.webp',     label: '달리기'   },
+    { id: 'duck-pilates', src: '/duck-pilates.webp', label: '필라테스' },
+    { id: 'duck-gym',     src: '/duck-gym.webp',     label: '헬스'     },
   ]
 
   useEffect(() => {
@@ -84,7 +84,7 @@ export default function MyPage() {
     router.push('/login')
   }
 
-  const currentAvatarSrc = AVATARS.find(a => a.id === avatar)?.src ?? '/duck.png'
+  const currentAvatarSrc = AVATARS.find(a => a.id === avatar)?.src ?? '/duck.webp'
 
   if (loading) return (
     <div className="flex items-center justify-center min-h-[60vh]">

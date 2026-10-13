@@ -1,13 +1,15 @@
 import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
+  compress: true,
+  poweredByHeader: false,
   experimental: {
     serverActions: {
       bodySizeLimit: '10mb',
     },
   },
   images: {
-    minimumCacheTTL: 60,
+    minimumCacheTTL: 86400,
     remotePatterns: [
       {
         protocol: 'https',

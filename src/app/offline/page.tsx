@@ -1,9 +1,11 @@
 'use client'
 
+import Image from 'next/image'
+
 export default function OfflinePage() {
   return (
     <div className="min-h-screen bg-[#FFF8FB] flex flex-col items-center justify-center gap-6 px-6">
-      <img src="/duck.png" alt="통통이" className="w-24 h-24 object-contain opacity-60" />
+      <Image src="/duck.webp" alt="통통이" width={96} height={96} className="object-contain opacity-60" />
       <div className="text-center">
         <h1 className="text-[22px] font-bold text-gray-700 mb-2">인터넷 연결이 없어요</h1>
         <p className="text-[14px] text-gray-400 leading-relaxed">

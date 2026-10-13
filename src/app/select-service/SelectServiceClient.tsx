@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Image from "next/image";
+import { AVATAR_SRC } from "@/lib/avatar";
 
 export interface SelectServiceProfile {
   name: string;
@@ -87,7 +88,14 @@ export default function SelectServiceClient({ profile }: { profile: SelectServic
                 background: "linear-gradient(135deg, #e0f2fe, #bae6fd)",
               }}
             >
-              <Image src="/duck-run.png" alt="운동치료" width={48} height={48} style={{ objectFit: "contain" }} />
+              <Image
+                src={AVATAR_SRC['duck-run']}
+                alt="운동치료"
+                width={48}
+                height={48}
+                style={{ objectFit: "contain" }}
+                priority
+              />
             </div>
             <div>
               <p style={{ fontSize: 18, fontWeight: 800, color: "#0f172a", margin: 0 }}>호수앤 통증클리닉</p>
@@ -123,7 +131,14 @@ export default function SelectServiceClient({ profile }: { profile: SelectServic
                 background: "linear-gradient(135deg, #fce7f3, #fbcfe8)",
               }}
             >
-              <Image src="/duck.png" alt="S바디" width={48} height={48} style={{ objectFit: "contain" }} />
+              <Image
+                src={AVATAR_SRC.duck}
+                alt="S바디"
+                width={48}
+                height={48}
+                style={{ objectFit: "contain" }}
+                priority
+              />
             </div>
             <div>
               <p style={{ fontSize: 18, fontWeight: 800, color: "#0f172a", margin: 0 }}>호수앤 S바디</p>

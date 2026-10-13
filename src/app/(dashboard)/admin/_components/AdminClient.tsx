@@ -44,10 +44,10 @@ interface Props {
 }
 
 const AVATARS: Record<string, string> = {
-  'duck':         '/duck.png',
-  'duck-run':     '/duck-run.png',
-  'duck-pilates': '/duck-pilates.png',
-  'duck-gym':     '/duck-gym.png',
+  'duck':         '/duck.webp',
+  'duck-run':     '/duck-run.webp',
+  'duck-pilates': '/duck-pilates.webp',
+  'duck-gym':     '/duck-gym.webp',
 }
 
 function getBMI(height: number | null, weight: number | null) {
@@ -442,7 +442,7 @@ export default function AdminClient({ members: initialMembers, staffId, initialN
                   p-4 shadow-sm hover:shadow-md hover:-translate-y-0.5
                   transition-all text-left flex items-stretch gap-3">
                 <div className="relative w-10 h-10 flex-shrink-0 self-center">
-                  <Image src={AVATARS[member.avatar ?? 'duck'] ?? '/duck.png'}
+                  <Image src={AVATARS[member.avatar ?? 'duck'] ?? '/duck.webp'}
                     alt={member.name} fill className="object-contain" />
                 </div>
                 <div className="flex-1 min-w-0 overflow-visible">
@@ -490,7 +490,7 @@ export default function AdminClient({ members: initialMembers, staffId, initialN
           <div className="bg-white rounded-[20px] border border-pink-100 p-5 shadow-sm mb-4">
             <div className="flex items-center gap-3 mb-4">
               <div className="relative w-14 h-14">
-                <Image src={AVATARS[selected.avatar ?? 'duck'] ?? '/duck.png'}
+                <Image src={AVATARS[selected.avatar ?? 'duck'] ?? '/duck.webp'}
                   alt={selected.name} fill className="object-contain" />
               </div>
               <div>

@@ -135,7 +135,7 @@ export default function DashboardPage() {
         flex items-center gap-4"
       >
         <Image
-          src="/duck.png"
+          src="/duck.webp"
           alt="통통이"
           width={60}
           height={60}

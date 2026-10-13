@@ -21,14 +21,14 @@ const LEVEL_LABELS: Record<ExerciseLevel, string> = {
 
 // 마이페이지 아바타 선택값(profiles.avatar) → 이미지 경로 매핑
 const AVATAR_SRC: Record<string, string> = {
-  duck: "/duck.png",
-  "duck-run": "/duck-run.png",
-  "duck-pilates": "/duck-pilates.png",
-  "duck-gym": "/duck-gym.png",
+  duck: "/duck.webp",
+  "duck-run": "/duck-run.webp",
+  "duck-pilates": "/duck-pilates.webp",
+  "duck-gym": "/duck-gym.webp",
 };
 
 function resolveAvatarSrc(avatar?: string | null): string {
-  return (avatar && AVATAR_SRC[avatar]) || "/duck.png";
+  return (avatar && AVATAR_SRC[avatar]) || "/duck.webp";
 }
 
 // 호수앤의 한마디 — 날짜 기준으로 매일 다른 문구 표시
@@ -343,7 +343,7 @@ export default function RehabDashboardClient({
             }}
           >
             <img
-              src="/duck-gym.png"
+              src="/duck-gym.webp"
               alt="운동"
               style={{ width: 28, height: 28, objectFit: "contain" }}
             />

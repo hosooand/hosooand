@@ -3,7 +3,11 @@ import { Geist } from 'next/font/google'
 import './globals.css'
 import ServiceWorkerRegister from '@/components/ServiceWorkerRegister'
 
-const geist = Geist({ variable: '--font-geist-sans', subsets: ['latin'] })
+const geist = Geist({
+  variable: '--font-geist-sans',
+  subsets: ['latin'],
+  display: 'swap',
+})
 
 export const metadata: Metadata = {
   title:       '호수앤',

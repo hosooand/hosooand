@@ -5,9 +5,9 @@ import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 import { Camera, Loader2, Sparkles, RefreshCw, X, ChevronDown, ChevronUp, CheckCircle2, Clock, Pencil, Check, Plus } from 'lucide-react'
 import { applyMealImageUrls, getMealImageUrls, MAX_MEAL_IMAGES } from '@/lib/meal-images'
-import duckRun from '@/assets/images/duck-run.png'
-import duckGym from '@/assets/images/duck-gym.png'
-import duckPilates from '@/assets/images/duck-pilates.png'
+import duckRun from '@/assets/images/duck-run.webp'
+import duckGym from '@/assets/images/duck-gym.webp'
+import duckPilates from '@/assets/images/duck-pilates.webp'
 
 const DUCK_RESULT_FRAMES = [duckRun, duckGym, duckPilates] as const
 
