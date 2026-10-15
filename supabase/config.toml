@@ -1,0 +1,6 @@
+# A string used to distinguish different Supabase projects on the same host.
+project_id = "ehhwkkgcipdvtbskvbig"
+
+[functions.delete-old-meal-images]
+# Cron에서 service_role Bearer로 호출. 공개 anon 키만으로는 실행되지 않게 함수 내부에서 검증한다.
+verify_jwt = false
